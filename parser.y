@@ -96,6 +96,9 @@
 
 
 // Precedence
+%precedence IF LET IN THEN WHILE DO
+%precedence ELSE //higher precedence to asociate the else part with the closest preceding if
+
 %right ASSIGN
 %left OR
 %left AND
