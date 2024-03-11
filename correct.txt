@@ -1,7 +1,8 @@
-42
-(* Top-level comment
-  (* Unterminated comment
-  ^-- Error should point here
-    (* Terminated netsted comment *)
-    (* Another one (* (nested even deeper) *)
-     *)
+class T {
+    f() : int32 {
+        let x : int32 in {
+            x <- 42;
+            x * x
+        }
+    }
+}

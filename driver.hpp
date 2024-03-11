@@ -89,7 +89,7 @@ namespace VSOP
         /**
          * @brief The result of the computation.
          */
-        int result;
+        Program* result;
 
     private:
         /**
