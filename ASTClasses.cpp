@@ -349,6 +349,20 @@ public:
     }
 };
 
+class Error : public Expression {
+private:
+    std::string message;
+
+public:
+    Error(std::string message): message(message) {}
+
+    ~Error() {}
+
+    std::string print() const override {
+        return message;
+    }
+};
+
 
 //Test the AST
 // int main() {
