@@ -11,6 +11,8 @@
 %define api.value.type variant
 %define api.token.constructor
 %define parse.error detailed
+%define parse.lac full
+
 
 %define parse.assert
 
@@ -195,7 +197,7 @@ expression:
     | expression LOWEREQUAL expression    { $$ = new BinaryOp("<=", $1, $3); }
     | expression AND expression           { $$ = new BinaryOp("and", $1, $3); }
     | NOT expression                      { $$ = new UnaryOp("not", $2); }
-    | MINUS expression  { $$ = new UnaryOp("-", $2); }
+    | MINUS expression                    { $$ = new UnaryOp("-", $2); }
     | ISNULL expression                   { $$ = new UnaryOp("isnull", $2); }
     | OBJECTIDENTIFIER ASSIGN expression  { $$ = new Assign($1, $3); }
     | IF expression THEN expression ELSE expression { $$ = new If($2, $4, $6); }
@@ -228,10 +230,13 @@ all_types:
 void VSOP::Parser::error(const location_type& l, const std::string& m)
 {
     const position &pos = l.begin;
-
+    
     cerr << *(pos.filename) << ":"
          << pos.line << ":" 
          << pos.column << ": "
-         << m
+         << m 
          << endl;
 }
+
+
+

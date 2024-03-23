@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 class List {
 isNil() : bool { true }
 length() : int32 { 0 }
@@ -30,4 +31,25 @@ print("\n");
 0
 }
 }
+=======
+class T {
+    heade() : int32 { heade }
+    headqq() : int32 { headqq }
+    f() : int32 {
+        let x : int32 in {
+            x <- 42;
+            x * x;
+	        if y < 40 then {
+                n <- 2;
+                x * x
+            } else {
+                n <- 3
+            } else {
+                n <- 3
+                x * x
+            }
+        }
+    }
+    head() : int32 { head int32}
+>>>>>>> 5ca869be345f3bf2d72605bf143cc2158d740a08
 }
