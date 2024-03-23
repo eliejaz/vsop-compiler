@@ -10,6 +10,7 @@
 %define api.token.raw
 %define api.value.type variant
 %define api.token.constructor
+%define parse.error detailed
 
 %define parse.assert
 
@@ -31,6 +32,7 @@
     #include "driver.hpp"
     using namespace std;
 }
+
 
 // Token and symbols definitions
 %token
@@ -92,8 +94,7 @@
 %type <std::vector<Expression*>> expressions
 %type <std::vector<Expression*>> func_arguments
 %type <std::vector<Formal*>> formals
-%type <std::string> all_types
-
+%type <Type*> all_types
 
 // Precedence
 %precedence IF LET IN THEN WHILE DO
@@ -126,8 +127,8 @@ classes:
 
 
 class_declaration:
-    CLASS all_types LBRACE class_members RBRACE { $$ = new Class($2, std::get<0>($4), std::get<1>($4)); }
-    | CLASS all_types EXTENDS all_types LBRACE class_members RBRACE { $$ = new Class($2, std::get<0>($6), std::get<1>($6), $4); }
+    CLASS TYPEIDENTIFIER LBRACE class_members RBRACE { $$ = new Class($2, std::get<0>($4), std::get<1>($4)); }
+    | CLASS TYPEIDENTIFIER EXTENDS TYPEIDENTIFIER LBRACE class_members RBRACE { $$ = new Class($2, std::get<0>($6), std::get<1>($6), $4); }
     ;
 
 class_members:
@@ -156,9 +157,18 @@ formal_declaration:
     ;
 
 block:
-    LBRACE expressions RBRACE { $$ = new Block($2); }
+    LBRACE RBRACE {
+        std::string errorMessage = "Blocks should contain at least one statement or expression.";
+        error(yyla.location, YY_MOVE(errorMessage));
+        YYERROR;
+    }
+    | LBRACE expressions RBRACE { $$ = new Block($2); }
+    | LBRACE expressions {
+        std::string errorMessage = "A closing '}' is missing.";
+        error(yyla.location, YY_MOVE(errorMessage));
+        YYERROR;
+    }
     ;
-
 expressions:
                                        { $$ = std::vector<Expression*>(); }
     | expression                       {  $$ = std::vector<Expression*>(); $$.push_back($1); }
@@ -193,10 +203,10 @@ expression:
     | WHILE expression DO expression                { $$ = new While($2, $4); }
     | LET OBJECTIDENTIFIER COLON all_types IN expression { $$ = new Let($2, $4, $6); }
     | LET OBJECTIDENTIFIER COLON all_types ASSIGN expression IN expression { $$ = new Let($2, $4, $8, $6); }
-    | NEW all_types { $$ = new New($2); }
+    | NEW TYPEIDENTIFIER { $$ = new New($2); }
     | OBJECTIDENTIFIER LPAR func_arguments RPAR { $$ = new Call($1, $3); }
     | expression DOT OBJECTIDENTIFIER LPAR func_arguments RPAR { $$ = new Call($3, $5, $1); }
-        ;
+    ;
 
 func_arguments:
                             { $$ = std::vector<Expression*>(); }
@@ -204,15 +214,16 @@ func_arguments:
     | func_arguments COMMA expression { ($1).push_back($3); $$ = $1; }
     ;
 
-all_types: 
-    TYPEIDENTIFIER  { $$ = $1; }
-    | INT32         { $$ = "int32"; }
-    | BOOL          { $$ = "bool"; }
-    | STRING        { $$ = "string"; }
-    | UNIT          { $$ = "unit"; }
+all_types:
+      TYPEIDENTIFIER  { $$ = new Type($1); }
+    | INT32           { $$ = new Type(Type::TypeName::Int32); }
+    | BOOL            { $$ = new Type(Type::TypeName::Bool); }
+    | STRING          { $$ = new Type(Type::TypeName::String); }
+    | UNIT            { $$ = new Type(Type::TypeName::Unit); }
     ;
 
 %%
+
 
 void VSOP::Parser::error(const location_type& l, const std::string& m)
 {

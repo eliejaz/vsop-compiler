@@ -33,22 +33,59 @@ public:
     virtual ~Literal() { }
 };
 
+class Type : public ASTNode {
+public:
+    enum class TypeName {
+        Int32,
+        Bool,
+        String,
+        Unit,
+        Custom
+    };
+
+    TypeName typeName;
+    std::string customTypeName;
+    Type(TypeName typeName) : typeName(typeName) {}
+
+    // Constructor for TYPEIDENTIFIER types.
+    Type(std::string customTypeName) : typeName(TypeName::Custom), customTypeName(customTypeName) {}
+
+    std::string print() const override  {
+        switch (typeName) {
+            case TypeName::Int32:
+                return "int32";
+            case TypeName::Bool:
+                return "bool";
+            case TypeName::String:
+                return "string";
+            case TypeName::Unit:
+                return "unit";
+            case TypeName::Custom:
+                return customTypeName;
+            default:
+                return "unknown";
+        }
+    }
+};
+
 class Field : public ASTNode {
 private:
     std::string name;
-    std::string type;
+    Type* type;
     Expression* initExpr;
 
 public:
-    Field(const std::string& name, const std::string& type, Expression* initExpr = nullptr)
+    Field(const std::string& name, Type* type, Expression* initExpr = nullptr)
         : name(name), type(type), initExpr(initExpr) {}
 
     ~Field() {
+        delete type;
+        delete initExpr;
     }
 
     std::string print() const override {
         std::ostringstream oss;
-        oss << "Field(" << name << ", " << type;
+        oss << "Field(" << name << ", " << type->print();
         if (initExpr) {
             oss << ", " << initExpr->print();
         }
@@ -60,14 +97,18 @@ public:
 class Formal : public ASTNode {
 private:
     std::string name;
-    std::string type;
+    Type* type;
 
 public:
-    Formal(const std::string& name, const std::string& type)
+    Formal(const std::string& name, Type* type)
         : name(name), type(type) {}
 
+    ~Formal() {
+            delete type;
+        }
+
     std::string print() const override {
-        return name + ": " + type;
+        return name + ": " + type->print();
     }
 };
 
@@ -80,6 +121,9 @@ public:
         : expressions(expressions) {}
 
     ~Block() {
+        for (auto expr : expressions) {
+            delete expr;
+         }
     }
 
     std::string print() const override {
@@ -97,7 +141,11 @@ public:
     If(Expression* condition, Expression* thenBranch, Expression* elseBranch = nullptr)
         : condition(condition), thenBranch(thenBranch), elseBranch(elseBranch) {}
 
-    ~If() {}
+    ~If() {
+        delete condition;
+        delete thenBranch;
+        delete elseBranch;
+    }
 
     std::string print() const override {
         std::ostringstream oss;
@@ -119,7 +167,10 @@ public:
     While(Expression* condition, Expression* body)
         : condition(condition), body(body) {}
 
-    ~While() {}
+    ~While() {
+        delete condition;
+        delete body;
+    }
 
     std::string print() const override {
         return "While(" + condition->print() + ", " + body->print() + ")";
@@ -129,19 +180,23 @@ public:
 class Let : public Expression {
 private:
     std::string name;
-    std::string type;
+    Type* type;
     Expression* initExpr;
     Expression* scopeExpr;
 
 public:
-    Let(const std::string& name, const std::string& type, Expression* scopeExpr, Expression* initExpr = nullptr)
+    Let(const std::string& name, Type* type, Expression* scopeExpr, Expression* initExpr = nullptr)
         : name(name), type(type), initExpr(initExpr), scopeExpr(scopeExpr) {}
 
-    ~Let() {}
+    ~Let() {
+        delete type;
+        delete initExpr;
+        delete scopeExpr;
+    }
 
     std::string print() const override {
         std::ostringstream oss;
-        oss << "Let(" << name << ", " << type;
+        oss << "Let(" << name << ", " << type->print();
         if (initExpr) {
             oss << ", " << initExpr->print();
         }
@@ -159,7 +214,9 @@ public:
     UnaryOp(const std::string& op, Expression* expr)
         : op(op), expr(expr) {}
 
-    ~UnaryOp() {}
+    ~UnaryOp() {
+        delete expr;
+    }
 
     std::string print() const override {
         return "UnOp(" + op + ", " + expr->print() + ")";
@@ -176,7 +233,10 @@ public:
     BinaryOp(const std::string& op, Expression* left, Expression* right)
         : op(op), left(left), right(right) {}
 
-    ~BinaryOp() {}
+    ~BinaryOp() {
+        delete left;
+        delete right;
+    }
 
     std::string print() const override {
         return "BinOp(" + op + ", " + left->print() + ", " + right->print() + ")";
@@ -192,7 +252,9 @@ public:
     Assign(const std::string& name, Expression* expr)
         : name(name), expr(expr) {}
 
-    ~Assign() {}
+    ~Assign() {
+        delete expr;
+    }
 
     std::string print() const override {
         return "Assign(" + name + ", " + expr->print() + ")";
@@ -234,7 +296,12 @@ public:
     Call(const std::string& methodName, const std::vector<Expression*>& args, Expression* caller = new ObjectId("self"))
         : caller(caller), methodName(methodName), args(args) {}
 
-    ~Call() {}
+    ~Call() {
+        delete caller;
+        for (auto expr : args) {
+            delete expr;
+        }
+    }
 
     std::string print() const override {
         return "Call(" + caller->print() + ", " + methodName + ", " + joinASTNodes(args) + ")";
@@ -285,25 +352,32 @@ public:
     }
 };
 
+
 class Method : public ASTNode {
 private: 
     std::string name;
     std::vector<Formal*> formals;
-    std::string returnType;
+    Type* returnType;
     Block* body; 
 
 public:
     Method(const std::string& name, std::vector<Formal*> formals, 
-           const std::string& returnType, Block* body)
+           Type* returnType, Block* body)
         : name(name), formals(formals), returnType(returnType), body(body) {}
 
-    ~Method() {}
+    ~Method() {
+        delete body;
+        for (auto formal : formals) {
+            delete formal;
+        }
+
+    }
 
     std::string print() const override {
         std::ostringstream oss;
         oss << "Method(" << name << ", ";
         oss << joinASTNodes(formals) << ", ";
-        oss << returnType << ", ";
+        oss << returnType->print() << ", ";
         oss << body->print() << ")";
         return oss.str();
     }
@@ -323,7 +397,15 @@ public:
           const std::string& parent = "Object")
         : name(name), parent(parent), fields(fields), methods(methods) {}
 
-    ~Class() { }
+    ~Class() {
+        for (auto field : fields) {
+            delete field;
+        }
+        for (auto method : methods) {
+            delete method;
+        }
+
+     }
 
     std::string print() const override {
         std::ostringstream oss;
@@ -342,7 +424,11 @@ public:
     Program(std::vector<Class*> classes)
             : classes(classes) {}
     
-    ~Program() {}
+    ~Program() {
+        for (auto classe : classes) {
+            delete classe;
+        }
+    }
 
     std::string print() const override {
         return joinASTNodes(classes);
@@ -352,30 +438,30 @@ public:
 
 //Test the AST
 // int main() {
-//     // Direct instantiation of AST nodes
 //     IntegerLiteral integerLiteral(42);
 
 //     std::vector<Expression*> printMethodArgs;
 //     printMethodArgs.push_back(&integerLiteral);
 
-//     // Note: In a non-unique_ptr version, managing dynamic memory (if needed)
-//     // would require careful allocation and deletion to prevent leaks.
 //     Call printCall("print", printMethodArgs);
 
 //     std::vector<Expression*> blockExpr;
 //     blockExpr.push_back(&printCall);
 //     Block mainBlock(blockExpr);
 
-//     Formal formal("value1", "type1");
+//     Type* formalType = new Type(Type::TypeName::String);
+//     Formal formal("value1", formalType);
 //     std::vector<Formal*> formals;
 //     formals.push_back(&formal);
 
-//     Method mainMethod("main", formals, "void", &mainBlock);
+//     Type* methodReturnType = new Type(Type::TypeName::Unit);
+//     Method mainMethod("main", formals, methodReturnType, &mainBlock);
 
 //     std::vector<Method*> methods;
 //     methods.push_back(&mainMethod);
 
 //     Class myClass("MyClass", std::vector<Field*>(), methods);
+
 //     std::vector<Class*> classes;
 //     classes.push_back(&myClass);
 
