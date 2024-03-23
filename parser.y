@@ -186,19 +186,19 @@ expression:
     | TRUE                                { $$ = new BooleanLiteral(true); }
     | FALSE                               { $$ = new BooleanLiteral(false); }
     | OBJECTIDENTIFIER                    { $$ = new ObjectId($1); }
-    | SELF                                { $$ = new ObjectId("self"); }
-    | expression PLUS expression          { $$ = new BinaryOp("+", $1, $3); }
-    | expression MINUS expression         { $$ = new BinaryOp("-", $1, $3); }
-    | expression TIMES expression         { $$ = new BinaryOp("*", $1, $3); }
-    | expression DIV expression           { $$ = new BinaryOp("/", $1, $3); }
-    | expression POW expression           { $$ = new BinaryOp("^", $1, $3); }
-    | expression EQUAL expression         { $$ = new BinaryOp("=", $1, $3); }
-    | expression LOWER expression         { $$ = new BinaryOp("<", $1, $3); }
-    | expression LOWEREQUAL expression    { $$ = new BinaryOp("<=", $1, $3); }
-    | expression AND expression           { $$ = new BinaryOp("and", $1, $3); }
-    | NOT expression                      { $$ = new UnaryOp("not", $2); }
-    | MINUS expression                    { $$ = new UnaryOp("-", $2); }
-    | ISNULL expression                   { $$ = new UnaryOp("isnull", $2); }
+    | SELF                                { $$ = new ObjectId(); }
+    | expression PLUS expression          { $$ = new BinaryOp(BinaryOp::Op::Add, $1, $3); }
+    | expression MINUS expression         { $$ = new BinaryOp(BinaryOp::Op::Subtract, $1, $3); }
+    | expression TIMES expression         { $$ = new BinaryOp(BinaryOp::Op::Multiply, $1, $3); }
+    | expression DIV expression           { $$ = new BinaryOp(BinaryOp::Op::Divide, $1, $3); }
+    | expression POW expression           { $$ = new BinaryOp(BinaryOp::Op::Power, $1, $3); }
+    | expression EQUAL expression         { $$ = new BinaryOp(BinaryOp::Op::Equal, $1, $3); }
+    | expression LOWER expression         { $$ = new BinaryOp(BinaryOp::Op::LessThan, $1, $3); }
+    | expression LOWEREQUAL expression    { $$ = new BinaryOp(BinaryOp::Op::LessEqual, $1, $3); }
+    | expression AND expression           { $$ = new BinaryOp(BinaryOp::Op::And, $1, $3); }
+    | NOT expression                      { $$ = new UnaryOp(UnaryOp::Op::Not, $2); }
+    | MINUS expression                    { $$ = new UnaryOp(UnaryOp::Op::Negate, $2); }
+    | ISNULL expression                   { $$ = new UnaryOp(UnaryOp::Op::IsNull, $2); }
     | OBJECTIDENTIFIER ASSIGN expression  { $$ = new Assign($1, $3); }
     | IF expression THEN expression ELSE expression { $$ = new If($2, $4, $6); }
     | IF expression THEN expression                 { $$ = new If($2, $4); }

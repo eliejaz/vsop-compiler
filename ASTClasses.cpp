@@ -206,12 +206,24 @@ public:
 };
 
 class UnaryOp : public Expression {
+public:
+    enum class Op { Negate, Not, IsNull };
+
 private:
-    std::string op;
+    Op op;
     Expression* expr;
 
+    std::string opToString() const {
+        switch (op) {
+            case Op::Negate: return "-";
+            case Op::Not: return "not";
+            case Op::IsNull: return "isnull";
+            default: return "unknown";
+        }
+    }
+
 public:
-    UnaryOp(const std::string& op, Expression* expr)
+    UnaryOp(Op op, Expression* expr)
         : op(op), expr(expr) {}
 
     ~UnaryOp() {
@@ -219,18 +231,37 @@ public:
     }
 
     std::string print() const override {
-        return "UnOp(" + op + ", " + expr->print() + ")";
+        return "UnOp(" + opToString() + ", " + expr->print() + ")";
     }
 };
 
+
 class BinaryOp : public Expression {
+public:
+    enum class Op { Add, Subtract, Multiply, Divide, Power, Equal, LessThan, LessEqual, And };
+
 private:
-    std::string op;
+    Op op;
     Expression* left;
     Expression* right;
 
+    std::string opToString() const {
+        switch (op) {
+            case Op::Add: return "+";
+            case Op::Subtract: return "-";
+            case Op::Multiply: return "*";
+            case Op::Divide: return "/";
+            case Op::Power: return "^";
+            case Op::Equal: return "=";
+            case Op::LessThan: return "<";
+            case Op::LessEqual: return "<=";
+            case Op::And: return "and";
+            default: return "unknown";
+        }
+    }
+
 public:
-    BinaryOp(const std::string& op, Expression* left, Expression* right)
+    BinaryOp(Op op, Expression* left, Expression* right)
         : op(op), left(left), right(right) {}
 
     ~BinaryOp() {
@@ -239,9 +270,10 @@ public:
     }
 
     std::string print() const override {
-        return "BinOp(" + op + ", " + left->print() + ", " + right->print() + ")";
+        return "BinOp(" + opToString() + ", " + left->print() + ", " + right->print() + ")";
     }
 };
+
 
 class Assign : public Expression {
 private:
@@ -279,7 +311,7 @@ private:
     std::string id;
 
 public:
-    ObjectId(const std::string& id) : id(id) {}
+    ObjectId(const std::string& id = "self") : id(id) {}
 
     std::string print() const override {
         return id;
