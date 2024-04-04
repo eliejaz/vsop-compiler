@@ -1,13 +1,38 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <set>
+#include <map>
 #include <string>
 #include <iomanip>
+#include "ClassSymbolTable.hpp"
+
+struct Position {
+    std::string fileName;
+    int line;
+    int column;
+    Position(const std::string& fileName="", int line = 0, int column = 0) : fileName(fileName), line(line), column(column) {}
+};
 
 class ASTNode {
+
 public:
+    Position pos;
     virtual ~ASTNode() { }
     virtual std::string print() const = 0;
+    void setPosition(const Position& position) { pos = position; }
+    void printSemanticError(const std::string& message) const{
+        std::ostringstream oss;
+        oss << pos.fileName << ":"
+         << pos.line << ":" 
+         << pos.column << ": "
+         << "Semantic error: "
+         << message
+         <<std::endl;
+         std::cerr << oss.str();
+    }
+    
+
 };
 
 template<typename T>
@@ -42,15 +67,17 @@ public:
         Unit,
         Custom
     };
-
+private:
     TypeName typeName;
     std::string customTypeName;
+
+public:
     Type(TypeName typeName) : typeName(typeName) {}
 
     // Constructor for TYPEIDENTIFIER types.
     Type(std::string customTypeName) : typeName(TypeName::Custom), customTypeName(customTypeName) {}
-
-    std::string print() const override  {
+    TypeName getType(){return typeName;}
+    std::string getTypeName() const{
         switch (typeName) {
             case TypeName::Int32:
                 return "int32";
@@ -66,6 +93,10 @@ public:
                 return "unknown";
         }
     }
+    std::string print() const override  {
+        return getTypeName();
+    }
+
 };
 
 class Field : public ASTNode {
@@ -92,6 +123,10 @@ public:
         oss << ")";
         return oss.str();
     }
+
+    Type* getType(){return type;}
+    std::string getName(){return name;}
+
 };
 
 class Formal : public ASTNode {
@@ -110,6 +145,8 @@ public:
     std::string print() const override {
         return name + ": " + type->print();
     }
+    Type* getType(){return type;}
+    std::string getName(){return name;}
 };
 
 class Block : public Expression {
@@ -203,6 +240,8 @@ public:
         oss << ", " << scopeExpr->print() << ")";
         return oss.str();
     }
+    Type* getType(){return type;}
+    std::string getName(){return name;}
 };
 
 class UnaryOp : public Expression {
@@ -291,6 +330,7 @@ public:
     std::string print() const override {
         return "Assign(" + name + ", " + expr->print() + ")";
     }
+    std::string getName(){return name;}
 };
 
 
@@ -404,7 +444,12 @@ public:
         }
 
     }
-
+    Type* getReturnType(){
+        return returnType;
+    }
+    std::string getName(){return name;}
+    std::vector<Formal*> getFormals(){return formals;}
+    
     std::string print() const override {
         std::ostringstream oss;
         oss << "Method(" << name << ", ";
@@ -439,12 +484,97 @@ public:
 
      }
 
+    std::string getName(){return name;}
+    std::string getParent(){return parent;}
+    std::vector<Method*> getMethods(){return methods;}
+
     std::string print() const override {
         std::ostringstream oss;
         oss << "Class(" << name << ", " << parent << ", ";
         oss << joinASTNodes(fields) << ", ";
         oss << joinASTNodes(methods) << ")";
         return oss.str();
+    }
+
+    void checkSemantics(const ClassSymbolTable& classSymbols) {
+        checkTypeDefinitions(classSymbols);
+        checkFieldRedefinitions();
+        checkMethodSignatures(classSymbols);
+    }
+
+    void checkFieldRedefinitions() {
+        std::set<std::string> fieldNames;
+        for ( auto* field : fields) {
+            if (!fieldNames.insert(field->getName()).second) {
+                std::cerr << "Semantic error: Redefinition of field '" << field->getName()
+                          << "' in class '" << name << "'." << std::endl;
+            }
+        }
+    }
+
+    void checkMethodSignatures(const ClassSymbolTable& classSymbols) {
+    std::map<std::string, Method*> methodSignatures;
+    for ( auto* method : methods) {
+        auto result = methodSignatures.insert({method->getName(), method});
+        if (!result.second && !areSignaturesEqual(result.first->second, method)) {
+            std::cerr << "Method '" << method->getName()
+                      << "' is redefined with a different signature in class '" << name << "'.";
+        }
+    }
+
+    // Check against parent class methods
+    Class* parentClass = classSymbols.getClass(parent);
+    while (parentClass) {
+        for (auto* parentMethod : parentClass->getMethods()) {
+            auto it = methodSignatures.find(parentMethod->getName());
+            if (it != methodSignatures.end() && !areSignaturesEqual(it->second, parentMethod)) {
+                std::ostringstream oss;
+                oss << "Overriding method '" << parentMethod->getName()
+                          << "' with different signature in class " << name << ".";
+                printSemanticError(oss.str());
+            }
+        }
+        parentClass = classSymbols.getClass(parentClass->getParent());
+    }
+}
+
+    bool areSignaturesEqual(Method* m1, Method* m2) {
+        if (m1->getReturnType()->getTypeName() != m2->getReturnType()->getTypeName()) {
+            return false;
+        }
+
+        const auto& formals1 = m1->getFormals();
+        const auto& formals2 = m2->getFormals();
+        if (formals1.size() != formals2.size()) {
+            return false;
+        }
+        for (size_t i = 0; i < formals1.size(); ++i) {
+            if (formals1[i]->getType()->getTypeName() != formals2[i]->getType()->getTypeName()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+
+    void checkTypeDefinitions(const ClassSymbolTable& classSymbols) {
+        for ( auto* field : fields) {
+            if (field->getType()->getType() == Type::TypeName::Custom &&!classSymbols.getClass(field->getType()->getTypeName())) {
+                std::ostringstream oss;
+                oss << "Semantic error: Unknown type " << field->getType()->getTypeName()
+                          << " used in field " << field->getName() << " in class " << name << ".";
+                printSemanticError(oss.str());
+            }
+        }
+        for ( auto* method : methods) {
+            if (method->getReturnType()->getType() == Type::TypeName::Custom && !classSymbols.getClass(method->getReturnType()->getTypeName())) {
+                std::ostringstream oss;
+                oss << "Unknown return type " << method->getReturnType()->getTypeName()
+                          << " of method " << method->getName() << " in class " << name << ".";
+                printSemanticError(oss.str());
+            }
+        }
     }
 };
 
@@ -463,9 +593,54 @@ public:
     }
 
     std::string print() const override {
+        checkSemantics();
         return joinASTNodes(classes);
     }
+
+    void checkSemantics() const {
+        ClassSymbolTable classSymbols;
+
+        // Add all classes to the symbol table, report redefinitions
+        for (auto* cls : classes) {
+            if (!classSymbols.addClass(cls->getName(), cls)) {
+                std::ostringstream oss;
+                oss  << cls->getName() << " is redefined.";
+                printSemanticError(oss.str());
+            }
+        }
+
+        // Check inheritance and detect cycles
+        for (auto* cls : classes) {
+            std::set<std::string> visited;
+            std::string current = cls->getName();
+            while (current != "Object") {
+                if (visited.find(current) != visited.end()) {
+                    std::ostringstream oss;
+                    oss  << "Inheritance cycle detected involving class " << current << ".";
+                    printSemanticError(oss.str());
+                    break;
+                }
+                visited.insert(current);
+
+                Class* parentClass = classSymbols.getClass(current);
+                if (!parentClass) {
+                    std::ostringstream oss;
+                    oss  << "Class " << current << " extends an undefined class.";
+                    printSemanticError(oss.str());
+                    break;
+                }
+                current = parentClass->getParent();
+            }
+        }
+
+          for (auto* cls : classes) {
+            cls->checkSemantics(classSymbols);
+        }
+
+
+    }
 };
+
 
 
 //Test the AST
