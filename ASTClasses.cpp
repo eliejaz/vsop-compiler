@@ -496,48 +496,13 @@ public:
         return oss.str();
     }
 
-    void checkSemantics(const ClassSymbolTable& classSymbols) {
-        checkTypeDefinitions(classSymbols);
-        checkFieldRedefinitions();
-        checkMethodSignatures(classSymbols);
+    bool checkSemantics(const ClassSymbolTable& classSymbols) {
+        bool noError = true;
+        noError &= checkTypeDefinitions(classSymbols);
+        noError &= checkFieldRedefinitions();
+        noError &= checkMethodSignatures(classSymbols);
+        return noError;
     }
-
-    void checkFieldRedefinitions() {
-        std::set<std::string> fieldNames;
-        for ( auto* field : fields) {
-            if (!fieldNames.insert(field->getName()).second) {
-                std::cerr << "Semantic error: Redefinition of field '" << field->getName()
-                          << "' in class '" << name << "'." << std::endl;
-            }
-        }
-    }
-
-    void checkMethodSignatures(const ClassSymbolTable& classSymbols) {
-    std::map<std::string, Method*> methodSignatures;
-    for ( auto* method : methods) {
-        auto result = methodSignatures.insert({method->getName(), method});
-        if (!result.second && !areSignaturesEqual(result.first->second, method)) {
-            std::cerr << "Method '" << method->getName()
-                      << "' is redefined with a different signature in class '" << name << "'.";
-        }
-    }
-
-    // Check against parent class methods
-    Class* parentClass = classSymbols.getClass(parent);
-    while (parentClass) {
-        for (auto* parentMethod : parentClass->getMethods()) {
-            auto it = methodSignatures.find(parentMethod->getName());
-            if (it != methodSignatures.end() && !areSignaturesEqual(it->second, parentMethod)) {
-                std::ostringstream oss;
-                oss << "Overriding method '" << parentMethod->getName()
-                          << "' with different signature in class " << name << ".";
-                printSemanticError(oss.str());
-            }
-        }
-        parentClass = classSymbols.getClass(parentClass->getParent());
-    }
-}
-
     bool areSignaturesEqual(Method* m1, Method* m2) {
         if (m1->getReturnType()->getTypeName() != m2->getReturnType()->getTypeName()) {
             return false;
@@ -556,26 +521,73 @@ public:
 
         return true;
     }
-
-
-    void checkTypeDefinitions(const ClassSymbolTable& classSymbols) {
-        for ( auto* field : fields) {
-            if (field->getType()->getType() == Type::TypeName::Custom &&!classSymbols.getClass(field->getType()->getTypeName())) {
-                std::ostringstream oss;
-                oss << "Semantic error: Unknown type " << field->getType()->getTypeName()
-                          << " used in field " << field->getName() << " in class " << name << ".";
-                printSemanticError(oss.str());
+    
+    bool checkFieldRedefinitions() {
+        bool noError = true;
+        std::set<std::string> fieldNames;
+        for (auto* field : fields) {
+            if (!fieldNames.insert(field->getName()).second) {
+                std::cerr << "Semantic error: Redefinition of field '" << field->getName()
+                        << "' in class '" << name << "'." << std::endl;
+                noError = false;
             }
         }
-        for ( auto* method : methods) {
+        return noError;
+    }
+
+    bool checkMethodSignatures(const ClassSymbolTable& classSymbols) {
+        bool noError = true;
+        std::map<std::string, Method*> methodSignatures;
+        for (auto* method : methods) {
+            auto result = methodSignatures.insert({method->getName(), method});
+            if (!result.second && !areSignaturesEqual(result.first->second, method)) {
+                std::cerr << "Method '" << method->getName()
+                        << "' is redefined with a different signature in class '" << name << "'.";
+                noError = false;
+            }
+        }
+
+        // Check against parent class methods
+        Class* parentClass = classSymbols.getClass(parent);
+        while (parentClass) {
+            for (auto* parentMethod : parentClass->getMethods()) {
+                auto it = methodSignatures.find(parentMethod->getName());
+                if (it != methodSignatures.end() && !areSignaturesEqual(it->second, parentMethod)) {
+                    std::ostringstream oss;
+                    oss << "Overriding method '" << parentMethod->getName()
+                            << "' with different signature in class " << name << ".";
+                    printSemanticError(oss.str());
+                    noError = false;
+                }
+            }
+            parentClass = classSymbols.getClass(parentClass->getParent());
+        }
+        return noError;
+    }
+
+    bool checkTypeDefinitions(const ClassSymbolTable& classSymbols) {
+        bool noError = true;
+        for (auto* field : fields) {
+            if (field->getType()->getType() == Type::TypeName::Custom && !classSymbols.getClass(field->getType()->getTypeName())) {
+                std::ostringstream oss;
+                oss << "Semantic error: Unknown type " << field->getType()->getTypeName()
+                        << " used in field " << field->getName() << " in class " << name << ".";
+                printSemanticError(oss.str());
+                noError = false;
+            }
+        }
+        for (auto* method : methods) {
             if (method->getReturnType()->getType() == Type::TypeName::Custom && !classSymbols.getClass(method->getReturnType()->getTypeName())) {
                 std::ostringstream oss;
                 oss << "Unknown return type " << method->getReturnType()->getTypeName()
-                          << " of method " << method->getName() << " in class " << name << ".";
+                        << " of method " << method->getName() << " in class " << name << ".";
                 printSemanticError(oss.str());
+                noError = false;
             }
         }
+        return noError;
     }
+
 };
 
 class Program : public ASTNode {
@@ -593,19 +605,21 @@ public:
     }
 
     std::string print() const override {
-        checkSemantics();
         return joinASTNodes(classes);
     }
 
-    void checkSemantics() const {
+   
+    bool checkSemantics() const {
+        bool noError = true;
         ClassSymbolTable classSymbols;
 
         // Add all classes to the symbol table, report redefinitions
         for (auto* cls : classes) {
             if (!classSymbols.addClass(cls->getName(), cls)) {
                 std::ostringstream oss;
-                oss  << cls->getName() << " is redefined.";
+                oss << cls->getName() << " is redefined.";
                 printSemanticError(oss.str());
+                noError = false;
             }
         }
 
@@ -616,8 +630,9 @@ public:
             while (current != "Object") {
                 if (visited.find(current) != visited.end()) {
                     std::ostringstream oss;
-                    oss  << "Inheritance cycle detected involving class " << current << ".";
+                    oss << "Inheritance cycle detected involving class " << current << ".";
                     printSemanticError(oss.str());
+                    noError = false;
                     break;
                 }
                 visited.insert(current);
@@ -625,20 +640,22 @@ public:
                 Class* parentClass = classSymbols.getClass(current);
                 if (!parentClass) {
                     std::ostringstream oss;
-                    oss  << "Class " << current << " extends an undefined class.";
+                    oss << "Class " << current << " extends an undefined class.";
                     printSemanticError(oss.str());
+                    noError = false;
                     break;
                 }
                 current = parentClass->getParent();
             }
         }
 
-          for (auto* cls : classes) {
-            cls->checkSemantics(classSymbols);
+        for (auto* cls : classes) {
+            noError &= cls->checkSemantics(classSymbols);
         }
 
-
+        return noError;
     }
+
 };
 
 
