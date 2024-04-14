@@ -48,16 +48,6 @@ std::string joinASTNodes(const std::vector<T*>& nodes) {
     return "[" + result.str() + "]";
 }
 
-class Expression : public ASTNode {
-public:
-    virtual ~Expression() { }
-};
-
-class Literal : public Expression {
-public:
-    virtual ~Literal() { }
-};
-
 class Type : public ASTNode {
 public:
     enum class TypeName {
@@ -77,6 +67,7 @@ public:
     // Constructor for TYPEIDENTIFIER types.
     Type(std::string customTypeName) : typeName(TypeName::Custom), customTypeName(customTypeName) {}
     TypeName getType(){return typeName;}
+    void SetTypeCustom(std::string name) {customTypeName = name;}
     std::string getTypeName() const{
         switch (typeName) {
             case TypeName::Int32:
@@ -97,6 +88,18 @@ public:
         return getTypeName();
     }
 
+};
+
+class Expression : public ASTNode {
+public:
+    Type* type;
+    virtual bool CheckSemantics() {return true;}
+    virtual ~Expression() { }
+};
+
+class Literal : public Expression {
+public:
+    virtual ~Literal() { }
 };
 
 class Field : public ASTNode {
@@ -126,6 +129,19 @@ public:
 
     Type* getType(){return type;}
     std::string getName(){return name;}
+
+    bool CheckSemantics(){
+        bool noError = true;
+        
+        //check type
+        if(initExpr && type->getType() != initExpr->type->getType()){
+            noError = false;
+            std::ostringstream oss;
+            oss << "Type mismatch for -> " << name << " : " << type->getTypeName() << ", but got : " << initExpr->type->getTypeName();
+            printSemanticError(oss.str());
+        }
+        return noError;
+    }
 
 };
 
@@ -166,6 +182,18 @@ public:
     std::string print() const override {
         return joinASTNodes(expressions);
     }
+
+    bool CheckSemantics() override {
+        bool noError = true; 
+        for(auto* exp : expressions){
+            noError &= exp->CheckSemantics();
+        }
+
+        //type of the last expression
+        type = new Type(expressions.back()->type->getType());
+
+        return noError;
+    }
 };
 
 class If : public Expression {
@@ -193,6 +221,36 @@ public:
         oss << ")";
         return oss.str();
     }
+
+    bool CheckSemantics() override{
+        bool noError = true;
+        std::ostringstream oss;
+        
+        noError &= condition->CheckSemantics();
+        noError &= thenBranch->CheckSemantics();
+        noError &= elseBranch->CheckSemantics();
+
+        if(condition->type->getType() != Type::TypeName::Bool){
+            oss << "Type mismatch for the condiction in 'If' type is : '" << condition->type->getTypeName() << "', expected : 'bool'";
+            printSemanticError(oss.str());
+        }
+
+        //assign type
+
+        if(thenBranch->type->getType() == Type::TypeName::Custom && elseBranch->type->getType() == Type::TypeName::Custom){
+            //TO DO find common ancestor
+            type = new Type(Type::TypeName::Custom);
+        } else if (thenBranch->type->getType() == elseBranch->type->getType()) {
+            type = new Type(elseBranch->type->getType());
+        } else if (thenBranch->type->getType() == Type::TypeName::Unit || elseBranch->type->getType() == Type::TypeName::Unit){
+            type = new Type(Type::TypeName::Unit);
+        } else {
+            oss << "Type mismatch for in 'If', both branch don't agree, type are : '" << thenBranch->type->getTypeName() << "' and '" << elseBranch->type->getTypeName() << "'";
+            printSemanticError(oss.str());            
+        }
+
+        return noError;
+    }
 };
 
 class While : public Expression {
@@ -211,6 +269,25 @@ public:
 
     std::string print() const override {
         return "While(" + condition->print() + ", " + body->print() + ")";
+    }
+
+    bool CheckSemantincs(){
+        bool noError = true;
+        std::ostringstream oss;
+        //Down first
+        noError &= condition->CheckSemantics();
+        noError &= body->CheckSemantics();
+
+        //assign type
+        type = new Type(Type::TypeName::Unit);
+
+        //type check
+        if(condition->type->getType() != Type::TypeName::Bool){
+            oss << "Type mismatch for condiction in 'While' type is : '" << condition->type->getTypeName() << "', expected : 'bool'";
+            printSemanticError(oss.str());
+        }
+
+        return noError;
     }
 };
 
@@ -242,6 +319,27 @@ public:
     }
     Type* getType(){return type;}
     std::string getName(){return name;}
+
+    bool CheckSemantics() override{
+        bool noError = true;
+
+        //Down first
+        noError &= initExpr->CheckSemantics();
+        noError &= scopeExpr->CheckSemantics();
+
+        Expression::type = new Type(scopeExpr->type->getType());
+
+        //type check
+        if(type->getType() != initExpr->type->getType() && initExpr != nullptr){
+            noError = false;
+            std::ostringstream oss;
+            oss << "Type mismatch in 'Let' type is : '" << initExpr->type->getTypeName() << "', expected : " << type->getTypeName();
+            printSemanticError(oss.str());
+        }
+
+        return noError;
+    }
+
 };
 
 class UnaryOp : public Expression {
@@ -271,6 +369,44 @@ public:
 
     std::string print() const override {
         return "UnOp(" + opToString() + ", " + expr->print() + ")";
+    }
+
+    bool CheckSemantics() override {
+        bool noError = true;
+        std::ostringstream oss;
+        //Down first
+        noError &= expr->CheckSemantics();
+
+        //assign type
+        switch (op) {
+            case Op::Negate: type = new Type(Type::TypeName::Int32);; break;
+            case Op::Not: type = new Type(Type::TypeName::Bool);; break;
+            case Op::IsNull: type = new Type(Type::TypeName::Bool);; break;
+        }
+
+        //type check
+        switch (op) {
+            case Op::Negate:
+            {
+                if(expr->type->getType() != Type::TypeName::Int32){
+                    noError = false;
+                    oss << "Type mismatch for Unary operator : " << opToString() << " . Type is : '" << expr->type->getTypeName() << " expected : 'int32'";
+                    printSemanticError(oss.str());
+                }
+            }; break;
+            case Op::Not:
+            {
+                if(expr->type->getType() != Type::TypeName::Bool){
+                    noError = false;
+                    oss << "Type mismatch for Unary operator : " << opToString() << " . Type is : '" << expr->type->getTypeName() << " expected : 'bool'";
+                    printSemanticError(oss.str());
+                }
+            }; break;
+            case Op::IsNull: //all type can be used
+            default: return noError;
+        }        
+
+        return noError;
     }
 };
 
@@ -311,8 +447,70 @@ public:
     std::string print() const override {
         return "BinOp(" + opToString() + ", " + left->print() + ", " + right->print() + ")";
     }
-};
 
+    bool CheckSemantics() override {
+        bool noError = true;
+        std::ostringstream oss;
+
+        //Down first
+        noError &= left->CheckSemantics();
+        noError &= right->CheckSemantics();
+
+
+
+        //assign type
+        switch (op) {
+            case Op::Add:
+            case Op::Subtract: 
+            case Op::Multiply: 
+            case Op::Divide:
+            case Op::Power: 
+            case Op::LessThan: 
+            case Op::LessEqual: type = new Type(Type::TypeName::Int32); break;
+            case Op::Equal: type = new Type(left->type->getType()); break;
+            case Op::And: type = new Type(Type::TypeName::Bool); break;
+        }
+        
+        //type check
+        switch (op)
+        {
+            case Op::Add:
+            case Op::Subtract:
+            case Op::Multiply:
+            case Op::Divide:
+            case Op::Power:
+            case Op::LessThan:
+            case Op::LessEqual:
+            {
+                if(left->type->getType() != Type::TypeName::Int32 || right->type->getType() != Type::TypeName::Int32){
+                    noError = false;
+                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getTypeName() << "' and '" << right->type->getTypeName() << "'";
+                    printSemanticError(oss.str());
+                }
+            }; break;
+            case Op::Equal: return "=";
+            {
+                if(left->type != right->type){
+                    noError = false;
+                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getTypeName() << "' and '" << right->type->getTypeName() << "'";
+                    printSemanticError(oss.str());
+                }
+            }; break;
+            case Op::And: return "and";
+            {
+                if(left->type->getType() != Type::TypeName::Bool || right->type->getType() != Type::TypeName::Bool ){
+                    noError = false;
+                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getTypeName() << "' and '" << right->type->getTypeName() << "'";
+                    printSemanticError(oss.str());
+                }
+            }; break;
+            default: return noError;
+            return noError;
+        }
+
+        return noError;
+    }
+};
 
 class Assign : public Expression {
 private:
@@ -331,6 +529,19 @@ public:
         return "Assign(" + name + ", " + expr->print() + ")";
     }
     std::string getName(){return name;}
+
+    bool CheckSemantics() override {
+        bool noError = true;
+
+        //Down first
+        noError &= expr->CheckSemantics();
+
+        //TODO check ID
+
+        type = new Type(expr->type->getType());
+
+        return noError;
+    }
 };
 
 
@@ -344,6 +555,15 @@ public:
     std::string print() const override {
         return "New(" + typeName + ")";
     }
+
+    bool CheckSemantics() override {
+        bool noError = true;
+
+        type = new Type(Type::TypeName::Custom);
+        type->SetTypeCustom(typeName);
+
+        return noError;
+    }
 };
 
 class ObjectId : public Expression {
@@ -356,6 +576,9 @@ public:
     std::string print() const override {
         return id;
     }
+
+    //TODO SEMANTICS
+
 };
 
 class Call : public Expression {
@@ -378,6 +601,15 @@ public:
     std::string print() const override {
         return "Call(" + caller->print() + ", " + methodName + ", " + joinASTNodes(args) + ")";
     }
+
+    bool CheckSemantics() override {
+        bool noError = true;
+
+        //TODO FIND METHOD
+        //type = new Type(/*method type*/);
+
+        return noError;
+    }
 };
 
 class IntegerLiteral : public Literal {
@@ -385,7 +617,7 @@ private:
     int value;
 
 public:
-    IntegerLiteral(int value) : value(value) {}
+    IntegerLiteral(int value) : value(value) {type = new Type(Type::TypeName::Int32);}
 
     std::string print() const override {
         return std::to_string(value);
@@ -397,7 +629,7 @@ private:
     std::string value;
 
 public:
-    StringLiteral(const std::string& value) : value(value) {}
+    StringLiteral(const std::string& value) : value(value) {type = new Type(Type::TypeName::String);}
 
     std::string print() const override {
         return value;
@@ -409,7 +641,7 @@ private:
     bool value;
 
 public:
-    BooleanLiteral(bool value) : value(value) {}
+    BooleanLiteral(bool value) : value(value) {type = new Type(Type::TypeName::Bool);}
 
     std::string print() const override {
         return value ? "true" : "false";
@@ -418,7 +650,7 @@ public:
 
 class UnitLiteral : public Literal {
 public:
-    UnitLiteral() = default;
+    UnitLiteral() {type = new Type(Type::TypeName::Unit);}
     std::string print() const override {
         return "()";
     }
@@ -457,6 +689,14 @@ public:
         oss << returnType->print() << ", ";
         oss << body->print() << ")";
         return oss.str();
+    }
+
+    bool CheckSemantics(){
+        bool noError = true;
+        
+        noError &= body->CheckSemantics();
+
+        return noError;
     }
 };
 
@@ -501,6 +741,18 @@ public:
         noError &= checkTypeDefinitions(classSymbols);
         noError &= checkFieldRedefinitions();
         noError &= checkMethodSignatures(classSymbols);
+
+        //Field
+        for (auto* fl : fields){
+            noError &= fl->CheckSemantics();
+        }
+
+        //methode
+        for (auto* mtd : methods){
+            noError &= mtd->CheckSemantics();
+        }
+
+
         return noError;
     }
     bool areSignaturesEqual(Method* m1, Method* m2) {
