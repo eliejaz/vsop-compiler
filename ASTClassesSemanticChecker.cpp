@@ -1,5 +1,35 @@
 #include "ASTClasses.hpp"
 
+/* Type */
+bool Type::isSubtypeOf(const Type* base, const ClassSymbolTable& classSymbols) const {
+    if (customTypeName == base->getStringTypeName()) {
+        return true;
+    }
+    Class* thisClass = classSymbols.getClass(customTypeName);
+    while (thisClass != nullptr) {
+        if (thisClass->getName() == base->getStringTypeName()) {
+            return true;
+        }
+        thisClass = classSymbols.getClass(thisClass->getParent());
+    }
+    return false;
+}
+
+bool Type::isCompatibleWith(const Type* other, const ClassSymbolTable& classSymbols) const {
+    if (typeName == TypeName::Unit || other->typeName == TypeName::Unit) {
+        // Everything is compatible with Unit type
+        return true;
+    }
+    if (typeName == other->typeName && typeName != TypeName::Custom) {
+        // Primitive types match exactly
+        return true;
+    }
+    if (typeName == TypeName::Custom && other->typeName == TypeName::Custom) {
+        return isSubtypeOf(other, classSymbols);
+    }
+    return false;
+}
+
 /* Block */
 bool Block::CheckSemantics()
 {
@@ -76,6 +106,7 @@ bool While::CheckSemantincs()
 
     return noError;
 }
+
 /* UnaryOp */
 bool Let::CheckSemantics()
 {
@@ -98,6 +129,7 @@ bool Let::CheckSemantics()
 
     return noError;
 }
+
 /* UnaryOp */
 bool UnaryOp::CheckSemantics()
 {

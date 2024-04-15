@@ -69,8 +69,7 @@ int main(int argc, char const *argv[])
                 res = -1;
         }
 
-        if (res == 0)
-            cout << driver.result->print() << endl;
+        cout << driver.result->print() << endl;
 
         return res;    
     }

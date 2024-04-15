@@ -1,5 +1,5 @@
 class P { add() : int32 { 42 } }
  class C extends P {
 
- add(i : int32) : int32 { i + 42 }
+ add(i : int32) : int32 { 42 }
  }

@@ -96,10 +96,9 @@ public:
             return "unknown";
         }
     }
-    std::string print() const override
-    {
-        return getStringTypeName();
-    }
+    std::string print() const override { return getStringTypeName(); }
+    bool isSubtypeOf(const Type* base, const ClassSymbolTable& classSymbols) const;
+    bool isCompatibleWith(const Type* other, const ClassSymbolTable& classSymbols) const;
 };
 
 class Expression : public ASTNode
@@ -108,6 +107,12 @@ public:
     Type *type;
     virtual bool CheckSemantics() { return true; }
     virtual ~Expression() {}
+    std::string tryAddTypeToPrint(std::string str) const{
+        if(type){
+          return str + " : " + type->getStringTypeName();
+        }
+        return str + " : TypeNotDefined" ;
+    }
 };
 
 class Literal : public Expression
@@ -135,7 +140,7 @@ public:
 
     std::string print() const override
     {
-        return joinASTNodes(expressions);
+        return tryAddTypeToPrint(joinASTNodes(expressions));
     }
     bool CheckSemantics() override;
 };
@@ -167,7 +172,8 @@ public:
             oss << ", " << elseBranch->print();
         }
         oss << ")";
-        return oss.str();
+
+        return tryAddTypeToPrint(oss.str());
     }
     bool CheckSemantics() override;
 };
@@ -190,7 +196,7 @@ public:
 
     std::string print() const override
     {
-        return "While(" + condition->print() + ", " + body->print() + ")";
+        return tryAddTypeToPrint("While(" + condition->print() + ", " + body->print() + ")");
     }
 
     bool CheckSemantincs();
@@ -224,7 +230,7 @@ public:
             oss << ", " << initExpr->print();
         }
         oss << ", " << scopeExpr->print() << ")";
-        return oss.str();
+        return tryAddTypeToPrint(oss.str());
     }
     Type *getType() { return type; }
     std::string getName() { return name; }
@@ -267,7 +273,7 @@ public:
     ~UnaryOp() { delete expr; }
     std::string print() const override
     {
-        return "UnOp(" + opToString() + ", " + expr->print() + ")";
+        return tryAddTypeToPrint("UnOp(" + opToString() + ", " + expr->print() + ")");
     }
     bool CheckSemantics() override;
 };
@@ -332,7 +338,7 @@ public:
 
     std::string print() const override
     {
-        return "BinOp(" + opToString() + ", " + left->print() + ", " + right->print() + ")";
+        return tryAddTypeToPrint("BinOp(" + opToString() + ", " + left->print() + ", " + right->print() + ")");
     }
     bool CheckSemantics() override;
 };
@@ -354,7 +360,7 @@ public:
 
     std::string print() const override
     {
-        return "Assign(" + name + ", " + expr->print() + ")";
+        return tryAddTypeToPrint("Assign(" + name + ", " + expr->print() + ")");
     }
     std::string getName() { return name; }
     bool CheckSemantics() override;
@@ -370,7 +376,7 @@ public:
 
     std::string print() const override
     {
-        return "New(" + typeName + ")";
+        return tryAddTypeToPrint("New(" + typeName + ")");
     }
 
     bool CheckSemantics() override;
@@ -386,7 +392,7 @@ public:
 
     std::string print() const override
     {
-        return id;
+        return tryAddTypeToPrint(id);
     }
 
     // TODO SEMANTICS
@@ -415,7 +421,7 @@ public:
 
     std::string print() const override
     {
-        return "Call(" + caller->print() + ", " + methodName + ", " + joinASTNodes(args) + ")";
+        return tryAddTypeToPrint("Call(" + caller->print() + ", " + methodName + ", " + joinASTNodes(args) + ")");
     }
     bool CheckSemantics() override;
 };
@@ -430,7 +436,7 @@ public:
 
     std::string print() const override
     {
-        return std::to_string(value);
+        return tryAddTypeToPrint(std::to_string(value));
     }
 };
 
@@ -444,7 +450,7 @@ public:
 
     std::string print() const override
     {
-        return value;
+        return tryAddTypeToPrint(value);
     }
 };
 
@@ -458,7 +464,7 @@ public:
 
     std::string print() const override
     {
-        return value ? "true" : "false";
+        return tryAddTypeToPrint(value ? "true" : "false");
     }
 };
 
@@ -468,7 +474,7 @@ public:
     UnitLiteral() { type = new Type(Type::TypeName::Unit); }
     std::string print() const override
     {
-        return "()";
+        return tryAddTypeToPrint("()");
     }
 };
 
