@@ -6,6 +6,8 @@
 #include <string>
 #include <iomanip>
 #include "ClassSymbolTable.hpp"
+#include "ProgramScope.hpp"
+
 
 struct Position {
     std::string fileName;
@@ -31,7 +33,6 @@ public:
          <<std::endl;
          std::cerr << oss.str();
     }
-    
 
 };
 
@@ -68,7 +69,7 @@ public:
     Type(std::string customTypeName) : typeName(TypeName::Custom), customTypeName(customTypeName) {}
     TypeName getType(){return typeName;}
     void SetTypeCustom(std::string name) {customTypeName = name;}
-    std::string getTypeName() const{
+    std::string getStringTypeName() const{
         switch (typeName) {
             case TypeName::Int32:
                 return "int32";
@@ -85,7 +86,7 @@ public:
         }
     }
     std::string print() const override  {
-        return getTypeName();
+        return getStringTypeName();
     }
 
 };
@@ -100,69 +101,6 @@ public:
 class Literal : public Expression {
 public:
     virtual ~Literal() { }
-};
-
-class Field : public ASTNode {
-private:
-    std::string name;
-    Type* type;
-    Expression* initExpr;
-
-public:
-    Field(const std::string& name, Type* type, Expression* initExpr = nullptr)
-        : name(name), type(type), initExpr(initExpr) {}
-
-    ~Field() {
-        delete type;
-        delete initExpr;
-    }
-
-    std::string print() const override {
-        std::ostringstream oss;
-        oss << "Field(" << name << ", " << type->print();
-        if (initExpr) {
-            oss << ", " << initExpr->print();
-        }
-        oss << ")";
-        return oss.str();
-    }
-
-    Type* getType(){return type;}
-    std::string getName(){return name;}
-
-    bool CheckSemantics(){
-        bool noError = true;
-        
-        //check type
-        if(initExpr && type->getType() != initExpr->type->getType()){
-            noError = false;
-            std::ostringstream oss;
-            oss << "Type mismatch for -> " << name << " : " << type->getTypeName() << ", but got : " << initExpr->type->getTypeName();
-            printSemanticError(oss.str());
-        }
-        return noError;
-    }
-
-};
-
-class Formal : public ASTNode {
-private:
-    std::string name;
-    Type* type;
-
-public:
-    Formal(const std::string& name, Type* type)
-        : name(name), type(type) {}
-
-    ~Formal() {
-            delete type;
-        }
-
-    std::string print() const override {
-        return name + ": " + type->print();
-    }
-    Type* getType(){return type;}
-    std::string getName(){return name;}
 };
 
 class Block : public Expression {
@@ -231,7 +169,7 @@ public:
         noError &= elseBranch->CheckSemantics();
 
         if(condition->type->getType() != Type::TypeName::Bool){
-            oss << "Type mismatch for the condiction in 'If' type is : '" << condition->type->getTypeName() << "', expected : 'bool'";
+            oss << "Type mismatch for the condiction in 'If' type is : '" << condition->type->getStringTypeName() << "', expected : 'bool'";
             printSemanticError(oss.str());
         }
 
@@ -245,7 +183,7 @@ public:
         } else if (thenBranch->type->getType() == Type::TypeName::Unit || elseBranch->type->getType() == Type::TypeName::Unit){
             type = new Type(Type::TypeName::Unit);
         } else {
-            oss << "Type mismatch for in 'If', both branch don't agree, type are : '" << thenBranch->type->getTypeName() << "' and '" << elseBranch->type->getTypeName() << "'";
+            oss << "Type mismatch for in 'If', both branch don't agree, type are : '" << thenBranch->type->getStringTypeName() << "' and '" << elseBranch->type->getStringTypeName() << "'";
             printSemanticError(oss.str());            
         }
 
@@ -283,7 +221,7 @@ public:
 
         //type check
         if(condition->type->getType() != Type::TypeName::Bool){
-            oss << "Type mismatch for condiction in 'While' type is : '" << condition->type->getTypeName() << "', expected : 'bool'";
+            oss << "Type mismatch for condiction in 'While' type is : '" << condition->type->getStringTypeName() << "', expected : 'bool'";
             printSemanticError(oss.str());
         }
 
@@ -333,7 +271,7 @@ public:
         if(type->getType() != initExpr->type->getType() && initExpr != nullptr){
             noError = false;
             std::ostringstream oss;
-            oss << "Type mismatch in 'Let' type is : '" << initExpr->type->getTypeName() << "', expected : " << type->getTypeName();
+            oss << "Type mismatch in 'Let' type is : '" << initExpr->type->getStringTypeName() << "', expected : " << type->getStringTypeName();
             printSemanticError(oss.str());
         }
 
@@ -390,7 +328,7 @@ public:
             {
                 if(expr->type->getType() != Type::TypeName::Int32){
                     noError = false;
-                    oss << "Type mismatch for Unary operator : " << opToString() << " . Type is : '" << expr->type->getTypeName() << " expected : 'int32'";
+                    oss << "Type mismatch for Unary operator : " << opToString() << " . Type is : '" << expr->type->getStringTypeName() << " expected : 'int32'";
                     printSemanticError(oss.str());
                 }
             }; break;
@@ -398,7 +336,7 @@ public:
             {
                 if(expr->type->getType() != Type::TypeName::Bool){
                     noError = false;
-                    oss << "Type mismatch for Unary operator : " << opToString() << " . Type is : '" << expr->type->getTypeName() << " expected : 'bool'";
+                    oss << "Type mismatch for Unary operator : " << opToString() << " . Type is : '" << expr->type->getStringTypeName() << " expected : 'bool'";
                     printSemanticError(oss.str());
                 }
             }; break;
@@ -484,7 +422,7 @@ public:
             {
                 if(left->type->getType() != Type::TypeName::Int32 || right->type->getType() != Type::TypeName::Int32){
                     noError = false;
-                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getTypeName() << "' and '" << right->type->getTypeName() << "'";
+                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getStringTypeName() << "' and '" << right->type->getStringTypeName() << "'";
                     printSemanticError(oss.str());
                 }
             }; break;
@@ -492,7 +430,7 @@ public:
             {
                 if(left->type != right->type){
                     noError = false;
-                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getTypeName() << "' and '" << right->type->getTypeName() << "'";
+                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getStringTypeName() << "' and '" << right->type->getStringTypeName() << "'";
                     printSemanticError(oss.str());
                 }
             }; break;
@@ -500,7 +438,7 @@ public:
             {
                 if(left->type->getType() != Type::TypeName::Bool || right->type->getType() != Type::TypeName::Bool ){
                     noError = false;
-                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getTypeName() << "' and '" << right->type->getTypeName() << "'";
+                    oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getStringTypeName() << "' and '" << right->type->getStringTypeName() << "'";
                     printSemanticError(oss.str());
                 }
             }; break;
@@ -656,6 +594,81 @@ public:
     }
 };
 
+class Field : public ASTNode {
+private:
+    std::string name;
+    Type* type;
+    Expression* initExpr;
+
+public:
+    Field(const std::string& name, Type* type, Expression* initExpr = nullptr)
+        : name(name), type(type), initExpr(initExpr) {}
+
+    ~Field() {
+        delete type;
+        delete initExpr;
+    }
+
+    std::string print() const override {
+        std::ostringstream oss;
+        oss << "Field(" << name << ", " << type->print();
+        if (initExpr) {
+            oss << ", " << initExpr->print();
+        }
+        oss << ")";
+        return oss.str();
+    }
+
+    Type* getType(){return type;}
+    std::string getName(){return name;}
+
+    bool checkSemantics(const ClassSymbolTable& classSymbols){
+        if (type->getType() == Type::TypeName::Custom && !classSymbols.getClass(type->getStringTypeName())) {
+            std::ostringstream oss;
+            oss << "Semantic error: Unknown type " << type->getStringTypeName()
+                    << " used in field " << name << " in class " << name << ".";
+            printSemanticError(oss.str());
+            return false;
+        }
+        initExpr->CheckSemantics();
+        return true;
+    }
+
+};
+
+class Formal : public ASTNode {
+private:
+    std::string name;
+    Type* type;
+
+public:
+    Formal(const std::string& name, Type* type)
+        : name(name), type(type) {}
+
+    ~Formal() {
+            delete type;
+        }
+
+    std::string print() const override {
+        return name + ": " + type->print();
+    }
+    Type* getType(){return type;}
+    std::string getName(){return name;}
+
+    bool checkSemantics(const ClassSymbolTable& classSymbols) {
+        bool noError = true; 
+
+        if (type->getType() == Type::TypeName::Custom && !classSymbols.hasClass(type->getStringTypeName())) {
+            std::ostringstream oss;
+            oss << "Unknown type '" << type->getStringTypeName() << "' used in formal parameter '" << name << "'.";
+            printSemanticError(oss.str());
+            noError = false;
+        }
+
+        return noError;
+    }
+
+};
 
 class Method : public ASTNode {
 private: 
@@ -691,11 +704,47 @@ public:
         return oss.str();
     }
 
-    bool CheckSemantics(){
-        bool noError = true;
-        
-        noError &= body->CheckSemantics();
+private:
+    bool checkMethodTypeDefinitions(const ClassSymbolTable& classSymbols){
+        if (returnType->getType() == Type::TypeName::Custom 
+            && !classSymbols.getClass(returnType->getStringTypeName())) {
+            std::ostringstream oss;
+            oss << "Unknown return type " << returnType->getStringTypeName()
+                    << " of method " << name << " in class " << name << ".";
+            printSemanticError(oss.str());
+            return false;
+        }
+        return true;
+    }
 
+    bool checkFormalParameterRedefinitions()  {
+        std::set<std::string> parameterNames;
+        bool noError = true;
+        for (auto* formal : formals) {
+            if (!parameterNames.insert(formal->getName()).second) {
+                std::cerr << "Semantic error: Redefinition of formal parameter '" << formal->getName()
+                        << "' in method '" << name << "'.\n";
+                noError = false;
+            }
+        }
+        return noError;
+    }
+
+    bool checkFormalSemantics(const ClassSymbolTable& classSymbols)  {
+        bool noError = true;
+        for (auto* formal : formals) {
+            noError &= formal->checkSemantics(classSymbols);
+        }
+        return noError;
+    }
+
+public:
+    bool checkSemantics(const ClassSymbolTable& classSymbols) {
+        bool noError = true;
+        noError &= checkMethodTypeDefinitions(classSymbols);
+        noError &= checkFormalParameterRedefinitions();
+        noError &= checkFormalSemantics(classSymbols);
+        noError &= body->CheckSemantics();
         return noError;
     }
 };
@@ -736,27 +785,9 @@ public:
         return oss.str();
     }
 
-    bool checkSemantics(const ClassSymbolTable& classSymbols) {
-        bool noError = true;
-        noError &= checkTypeDefinitions(classSymbols);
-        noError &= checkFieldRedefinitions();
-        noError &= checkMethodSignatures(classSymbols);
-
-        //Field
-        for (auto* fl : fields){
-            noError &= fl->CheckSemantics();
-        }
-
-        //methode
-        for (auto* mtd : methods){
-            noError &= mtd->CheckSemantics();
-        }
-
-
-        return noError;
-    }
+private:
     bool areSignaturesEqual(Method* m1, Method* m2) {
-        if (m1->getReturnType()->getTypeName() != m2->getReturnType()->getTypeName()) {
+        if (m1->getReturnType()->getStringTypeName() != m2->getReturnType()->getStringTypeName()) {
             return false;
         }
 
@@ -766,12 +797,39 @@ public:
             return false;
         }
         for (size_t i = 0; i < formals1.size(); ++i) {
-            if (formals1[i]->getType()->getTypeName() != formals2[i]->getType()->getTypeName()) {
+            if (formals1[i]->getType()->getStringTypeName() != formals2[i]->getType()->getStringTypeName()) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    bool checkInheritanceSemantic(const ClassSymbolTable& classSymbols){
+        std::set<std::string> visited;
+        std::string current = name;
+        bool noError = true;
+        while (current != "Object") {
+            if (visited.find(current) != visited.end()) {
+                std::ostringstream oss;
+                oss << "Inheritance cycle detected involving class " << current << ".";
+                printSemanticError(oss.str());
+                noError = false;
+                break;
+            }
+            visited.insert(current);
+
+            Class* parentClass = classSymbols.getClass(current);
+            if (!parentClass) {
+                std::ostringstream oss;
+                oss << "Class " << current << " extends an undefined class.";
+                printSemanticError(oss.str());
+                noError = false;
+                break;
+            }
+            current = parentClass->getParent();
+        }
+        return noError;
     }
     
     bool checkFieldRedefinitions() {
@@ -817,29 +875,27 @@ public:
         return noError;
     }
 
-    bool checkTypeDefinitions(const ClassSymbolTable& classSymbols) {
+    bool checkClassDefinitionsSemantics(const ClassSymbolTable& classSymbols) {
         bool noError = true;
         for (auto* field : fields) {
-            if (field->getType()->getType() == Type::TypeName::Custom && !classSymbols.getClass(field->getType()->getTypeName())) {
-                std::ostringstream oss;
-                oss << "Semantic error: Unknown type " << field->getType()->getTypeName()
-                        << " used in field " << field->getName() << " in class " << name << ".";
-                printSemanticError(oss.str());
-                noError = false;
-            }
+            noError &= field->checkSemantics(classSymbols);
         }
         for (auto* method : methods) {
-            if (method->getReturnType()->getType() == Type::TypeName::Custom && !classSymbols.getClass(method->getReturnType()->getTypeName())) {
-                std::ostringstream oss;
-                oss << "Unknown return type " << method->getReturnType()->getTypeName()
-                        << " of method " << method->getName() << " in class " << name << ".";
-                printSemanticError(oss.str());
-                noError = false;
-            }
+            noError &= method->checkSemantics(classSymbols);
         }
         return noError;
     }
 
+public:
+    bool checkSemantics(const ClassSymbolTable& classSymbols) {
+        bool noError = true;
+        noError &= checkInheritanceSemantic(classSymbols);
+        noError &= checkFieldRedefinitions();
+        noError &= checkMethodSignatures(classSymbols);
+        noError &= checkClassDefinitionsSemantics(classSymbols);
+
+        return noError;
+    }
 };
 
 class Program : public ASTNode {
@@ -864,6 +920,8 @@ public:
     bool checkSemantics() const {
         bool noError = true;
         ClassSymbolTable classSymbols;
+        Class* objectClass = createObjectClass();
+        classSymbols.addClass(objectClass->getName(), objectClass);
 
         // Add all classes to the symbol table, report redefinitions
         for (auto* cls : classes) {
@@ -875,32 +933,6 @@ public:
             }
         }
 
-        // Check inheritance and detect cycles
-        for (auto* cls : classes) {
-            std::set<std::string> visited;
-            std::string current = cls->getName();
-            while (current != "Object") {
-                if (visited.find(current) != visited.end()) {
-                    std::ostringstream oss;
-                    oss << "Inheritance cycle detected involving class " << current << ".";
-                    printSemanticError(oss.str());
-                    noError = false;
-                    break;
-                }
-                visited.insert(current);
-
-                Class* parentClass = classSymbols.getClass(current);
-                if (!parentClass) {
-                    std::ostringstream oss;
-                    oss << "Class " << current << " extends an undefined class.";
-                    printSemanticError(oss.str());
-                    noError = false;
-                    break;
-                }
-                current = parentClass->getParent();
-            }
-        }
-
         for (auto* cls : classes) {
             noError &= cls->checkSemantics(classSymbols);
         }
@@ -908,43 +940,16 @@ public:
         return noError;
     }
 
+private:
+    Class* createObjectClass() const {
+        std::vector<Method*> methods = {
+            new Method("print", {new Formal("s", new Type(Type::TypeName::String))}, new Type("Object"), new Block({})),
+            new Method("printBool", {new Formal("b", new Type(Type::TypeName::Bool))}, new Type("Object"), new Block({})),
+            new Method("printInt32", {new Formal("i", new Type(Type::TypeName::Int32))}, new Type("Object"), new Block({})),
+            new Method("inputLine", {}, new Type(Type::TypeName::String), new Block({})),
+            new Method("inputBool", {}, new Type(Type::TypeName::Bool), new Block({})),
+            new Method("inputInt32", {}, new Type(Type::TypeName::Int32), new Block({}))
+        };
+        return new Class("Object", {}, methods, "");
+    }
 };
-
-
-
-//Test the AST
-// int main() {
-//     IntegerLiteral integerLiteral(42);
-
-//     std::vector<Expression*> printMethodArgs;
-//     printMethodArgs.push_back(&integerLiteral);
-
-//     Call printCall("print", printMethodArgs);
-
-//     std::vector<Expression*> blockExpr;
-//     blockExpr.push_back(&printCall);
-//     Block mainBlock(blockExpr);
-
-//     Type* formalType = new Type(Type::TypeName::String);
-//     Formal formal("value1", formalType);
-//     std::vector<Formal*> formals;
-//     formals.push_back(&formal);
-
-//     Type* methodReturnType = new Type(Type::TypeName::Unit);
-//     Method mainMethod("main", formals, methodReturnType, &mainBlock);
-
-//     std::vector<Method*> methods;
-//     methods.push_back(&mainMethod);
-
-//     Class myClass("MyClass", std::vector<Field*>(), methods);
-
-//     std::vector<Class*> classes;
-//     classes.push_back(&myClass);
-
-//     Program program(classes);
-
-//     // Print the AST
-//     std::cout << program.print() << std::endl;
-
-//     return 0;
-// }

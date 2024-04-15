@@ -25,6 +25,11 @@ public:
         }
         return nullptr;
     }
+
+    bool hasClass(const std::string& name) const {
+        return classes.find(name) != classes.end();
+    }
+
 };
 
 #endif
