@@ -18,7 +18,7 @@
 
 // C++ code put inside header file
 %code requires {
-    #include "ASTClasses.cpp"
+    #include "ASTClasses.hpp"
     #include <string>
     #include <memory>
     #include <vector>
