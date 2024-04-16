@@ -23,6 +23,7 @@ class ASTNode
 {
 public:
     Position pos;
+    ProgramScope* scope;
     virtual ~ASTNode() {}
     virtual std::string print() const = 0;
     void setPosition(const Position &position) { pos = position; }
@@ -37,6 +38,11 @@ public:
             << std::endl;
         std::cerr << oss.str();
     }
+    virtual bool checkSemantics(__attribute__((unused))ClassSymbolTable* classSymbols = nullptr, ProgramScope* parentScope = nullptr) { 
+    scope = parentScope;
+    return true; 
+    }
+
 };
 
 template <typename T>
@@ -97,21 +103,20 @@ public:
         }
     }
     std::string print() const override { return getStringTypeName(); }
-    bool isSubtypeOf(const Type* base, const ClassSymbolTable& classSymbols) const;
-    bool isCompatibleWith(const Type* other, const ClassSymbolTable& classSymbols) const;
+    bool isSubtypeOf(const Type* base, ClassSymbolTable* classSymbols) const;
+    bool isCompatibleWith(const Type* other, ClassSymbolTable* classSymbols) const;
 };
 
 class Expression : public ASTNode
 {
 public:
     Type *type;
-    virtual bool CheckSemantics() { return true; }
     virtual ~Expression() {}
     std::string tryAddTypeToPrint(std::string str) const{
         if(type){
           return str + " : " + type->getStringTypeName();
         }
-        return str + " : TypeNotDefined" ;
+        return str + " : TypeUndefined";
     }
 };
 
@@ -142,7 +147,7 @@ public:
     {
         return tryAddTypeToPrint(joinASTNodes(expressions));
     }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class If : public Expression
@@ -175,7 +180,7 @@ public:
 
         return tryAddTypeToPrint(oss.str());
     }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class While : public Expression
@@ -199,20 +204,20 @@ public:
         return tryAddTypeToPrint("While(" + condition->print() + ", " + body->print() + ")");
     }
 
-    bool CheckSemantincs();
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Let : public Expression
 {
 private:
     std::string name;
-    Type *type;
+    Type *letType;
     Expression *initExpr;
     Expression *scopeExpr;
 
 public:
-    Let(const std::string &name, Type *type, Expression *scopeExpr, Expression *initExpr = nullptr)
-        : name(name), type(type), initExpr(initExpr), scopeExpr(scopeExpr) {}
+    Let(const std::string &name, Type *letType, Expression *scopeExpr, Expression *initExpr = nullptr)
+        : name(name), letType(letType), initExpr(initExpr), scopeExpr(scopeExpr) {}
 
     ~Let()
     {
@@ -224,7 +229,7 @@ public:
     std::string print() const override
     {
         std::ostringstream oss;
-        oss << "Let(" << name << ", " << type->print();
+        oss << "Let(" << name << ", " << letType->print();
         if (initExpr)
         {
             oss << ", " << initExpr->print();
@@ -232,9 +237,9 @@ public:
         oss << ", " << scopeExpr->print() << ")";
         return tryAddTypeToPrint(oss.str());
     }
-    Type *getType() { return type; }
+    Type *getLetType() { return letType; }
     std::string getName() { return name; }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class UnaryOp : public Expression
@@ -275,7 +280,7 @@ public:
     {
         return tryAddTypeToPrint("UnOp(" + opToString() + ", " + expr->print() + ")");
     }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class BinaryOp : public Expression
@@ -340,7 +345,7 @@ public:
     {
         return tryAddTypeToPrint("BinOp(" + opToString() + ", " + left->print() + ", " + right->print() + ")");
     }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Assign : public Expression
@@ -363,7 +368,7 @@ public:
         return tryAddTypeToPrint("Assign(" + name + ", " + expr->print() + ")");
     }
     std::string getName() { return name; }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class New : public Expression
@@ -379,7 +384,7 @@ public:
         return tryAddTypeToPrint("New(" + typeName + ")");
     }
 
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class ObjectId : public Expression
@@ -395,8 +400,7 @@ public:
         return tryAddTypeToPrint(id);
     }
 
-    // TODO SEMANTICS
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Call : public Expression
@@ -423,7 +427,7 @@ public:
     {
         return tryAddTypeToPrint("Call(" + caller->print() + ", " + methodName + ", " + joinASTNodes(args) + ")");
     }
-    bool CheckSemantics() override;
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class IntegerLiteral : public Literal
@@ -509,7 +513,7 @@ public:
 
     Type *getType() { return type; }
     std::string getName() { return name; }
-    bool checkSemantics(const ClassSymbolTable &classSymbols);
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Formal : public ASTNode
@@ -531,7 +535,7 @@ public:
 
     Type *getType() { return type; }
     std::string getName() { return name; }
-    bool checkSemantics(const ClassSymbolTable &classSymbols);
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Method : public ASTNode
@@ -543,9 +547,8 @@ private:
     Block *body;
 
 private:
-    bool checkMethodTypeDefinitions(const ClassSymbolTable &classSymbols);
-    bool checkFormalParameterRedefinitions();
-    bool checkFormalSemantics(const ClassSymbolTable &classSymbols);
+    bool checkMethodTypeDefinitions(ClassSymbolTable* classSymbols);
+    bool checkFormalSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope);
 
 public:
     Method(const std::string &name, std::vector<Formal *> formals,
@@ -576,7 +579,7 @@ public:
         oss << body->print() << ")";
         return oss.str();
     }
-    bool checkSemantics(const ClassSymbolTable &classSymbols);
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Class : public ASTNode
@@ -589,10 +592,9 @@ private:
 
 private:
     bool areSignaturesEqual(Method *m1, Method *m2);
-    bool checkInheritanceSemantic(const ClassSymbolTable &classSymbols);
-    bool checkFieldRedefinitions();
-    bool checkMethodSignatures(const ClassSymbolTable &classSymbols);
-    bool checkClassDefinitionsSemantics(const ClassSymbolTable &classSymbols);
+    bool checkInheritanceSemantic(ClassSymbolTable* classSymbols);
+    bool checkMethodSignatures(ClassSymbolTable* classSymbols);
+    bool checkClassDefinitionsSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope);
 
 public:
     Class(const std::string &name,
@@ -612,7 +614,6 @@ public:
     std::string getName() { return name; }
     std::string getParent() { return parent; }
     std::vector<Method *> getMethods() { return methods; }
-
     std::string print() const override
     {
         std::ostringstream oss;
@@ -622,7 +623,23 @@ public:
         return oss.str();
     }
 
-    bool checkSemantics(const ClassSymbolTable &classSymbols);
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    Method* getMethod(const std::string& methodName, ClassSymbolTable* classSymbols) {
+        for (Method* method : methods) {
+            if (method->getName() == methodName) {
+                return method;
+            }
+        }
+
+        if (!parent.empty()) {
+            Class* parentClass = classSymbols->getClass(parent);
+            if (parentClass) {
+                return parentClass->getMethod(methodName, classSymbols);
+            }
+        }
+
+        return nullptr;
+    }
 };
 
 class Program : public ASTNode
@@ -650,6 +667,6 @@ public:
         return joinASTNodes(classes);
     }
 
-    bool checkSemantics();
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 #endif

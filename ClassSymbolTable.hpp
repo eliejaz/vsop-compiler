@@ -18,7 +18,7 @@ public:
         return true;
     }
 
-     Class* getClass(const std::string& name) const {
+     Class* getClass(const std::string& name) {
         auto it = classes.find(name);
         if (it != classes.end()) {
             return it->second;
@@ -26,7 +26,7 @@ public:
         return nullptr;
     }
 
-    bool hasClass(const std::string& name) const {
+    bool hasClass(const std::string& name) {
         return classes.find(name) != classes.end();
     }
 

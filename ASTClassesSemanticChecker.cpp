@@ -1,21 +1,21 @@
 #include "ASTClasses.hpp"
 
 /* Type */
-bool Type::isSubtypeOf(const Type* base, const ClassSymbolTable& classSymbols) const {
+bool Type::isSubtypeOf(const Type* base, ClassSymbolTable* classSymbols) const {
     if (customTypeName == base->getStringTypeName()) {
         return true;
     }
-    Class* thisClass = classSymbols.getClass(customTypeName);
+    Class* thisClass = classSymbols->getClass(customTypeName);
     while (thisClass != nullptr) {
         if (thisClass->getName() == base->getStringTypeName()) {
             return true;
         }
-        thisClass = classSymbols.getClass(thisClass->getParent());
+        thisClass = classSymbols->getClass(thisClass->getParent());
     }
     return false;
 }
 
-bool Type::isCompatibleWith(const Type* other, const ClassSymbolTable& classSymbols) const {
+bool Type::isCompatibleWith(const Type* other, ClassSymbolTable* classSymbols) const {
     if (typeName == TypeName::Unit || other->typeName == TypeName::Unit) {
         // Everything is compatible with Unit type
         return true;
@@ -27,33 +27,37 @@ bool Type::isCompatibleWith(const Type* other, const ClassSymbolTable& classSymb
     if (typeName == TypeName::Custom && other->typeName == TypeName::Custom) {
         return isSubtypeOf(other, classSymbols);
     }
+
     return false;
 }
 
 /* Block */
-bool Block::CheckSemantics()
+bool Block::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
+    ProgramScope* blockScope= new ProgramScope(parentScope);
     bool noError = true;
     for (auto *exp : expressions)
     {
-        noError &= exp->CheckSemantics();
+        noError &= exp->checkSemantics(classSymbols, blockScope);
     }
 
     // type of the last expression
-    type = new Type(expressions.back()->type->getType());
+    type = expressions.back()->type;
+
+    scope = blockScope;
 
     return noError;
 }
 
 /* If */
-bool If::CheckSemantics()
+bool If::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
     std::ostringstream oss;
 
-    noError &= condition->CheckSemantics();
-    noError &= thenBranch->CheckSemantics();
-    noError &= elseBranch->CheckSemantics();
+    noError &= condition->checkSemantics(classSymbols, parentScope);
+    noError &= thenBranch->checkSemantics(classSymbols, parentScope);
+    noError &= elseBranch->checkSemantics(classSymbols, parentScope);
 
     if (condition->type->getType() != Type::TypeName::Bool)
     {
@@ -70,7 +74,7 @@ bool If::CheckSemantics()
     }
     else if (thenBranch->type->getType() == elseBranch->type->getType())
     {
-        type = new Type(elseBranch->type->getType());
+        type = elseBranch->type;
     }
     else if (thenBranch->type->getType() == Type::TypeName::Unit || elseBranch->type->getType() == Type::TypeName::Unit)
     {
@@ -82,17 +86,19 @@ bool If::CheckSemantics()
         printSemanticError(oss.str());
     }
 
+    scope = parentScope;
+
     return noError;
 }
 
 /* While */
-bool While::CheckSemantincs()
+bool While::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
     std::ostringstream oss;
     // Down first
-    noError &= condition->CheckSemantics();
-    noError &= body->CheckSemantics();
+    noError &= condition->checkSemantics(classSymbols, parentScope);
+    noError &= body->checkSemantics(classSymbols, parentScope);
 
     // assign type
     type = new Type(Type::TypeName::Unit);
@@ -103,40 +109,45 @@ bool While::CheckSemantincs()
         oss << "Type mismatch for condiction in 'While' type is : '" << condition->type->getStringTypeName() << "', expected : 'bool'";
         printSemanticError(oss.str());
     }
+    scope = parentScope;
 
     return noError;
 }
 
 /* UnaryOp */
-bool Let::CheckSemantics()
+bool Let::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
+    parentScope->addSymbol(name, letType);
 
-    // Down first
-    noError &= initExpr->CheckSemantics();
-    noError &= scopeExpr->CheckSemantics();
-
-    Expression::type = new Type(scopeExpr->type->getType());
+    if (initExpr)
+    {
+    noError &= initExpr->checkSemantics(classSymbols, parentScope);
+        }
+    noError &= scopeExpr->checkSemantics(classSymbols, parentScope);
 
     // type check
-    if (type->getType() != initExpr->type->getType() && initExpr != nullptr)
+    if (letType->isCompatibleWith(initExpr->type, classSymbols) && initExpr != nullptr)
     {
         noError = false;
         std::ostringstream oss;
-        oss << "Type mismatch in 'Let' type is : '" << initExpr->type->getStringTypeName() << "', expected : " << type->getStringTypeName();
+        oss << "Type mismatch in 'Let' type is : '" << initExpr->type->getStringTypeName() << "', expected : " << letType->getStringTypeName();
         printSemanticError(oss.str());
     }
+    type = scopeExpr->type;
+
+    scope = parentScope;
 
     return noError;
 }
 
 /* UnaryOp */
-bool UnaryOp::CheckSemantics()
+bool UnaryOp::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
     std::ostringstream oss;
     // Down first
-    noError &= expr->CheckSemantics();
+    noError &= expr->checkSemantics(classSymbols, parentScope);
 
     // assign type
     switch (op)
@@ -183,18 +194,20 @@ bool UnaryOp::CheckSemantics()
         return noError;
     }
 
+    scope = parentScope;
+
     return noError;
 }
 
 /* BinaryOp */
-bool BinaryOp::CheckSemantics()
+bool BinaryOp::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
     std::ostringstream oss;
 
     // Down first
-    noError &= left->CheckSemantics();
-    noError &= right->CheckSemantics();
+    noError &= left->checkSemantics(classSymbols, parentScope);
+    noError &= right->checkSemantics(classSymbols, parentScope);
 
     // assign type
     switch (op)
@@ -209,7 +222,7 @@ bool BinaryOp::CheckSemantics()
         type = new Type(Type::TypeName::Int32);
         break;
     case Op::Equal:
-        type = new Type(left->type->getType());
+        type = left->type;
         break;
     case Op::And:
         type = new Type(Type::TypeName::Bool);
@@ -262,61 +275,116 @@ bool BinaryOp::CheckSemantics()
         return noError;
     }
 
+    scope = parentScope;
+
     return noError;
 }
 
 /* Assign */
-bool Assign::CheckSemantics()
+bool Assign::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
-
-    // Down first
-    noError &= expr->CheckSemantics();
-
-    // TODO check ID
-
-    type = new Type(expr->type->getType());
+    noError &= expr->checkSemantics(classSymbols, parentScope);
+    type = expr->type;
+    parentScope->addSymbol(name, type);
+    
+    scope = parentScope;
 
     return noError;
 }
 
 /* New */
-bool New::CheckSemantics()
+bool New::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
 
+    if (!classSymbols->hasClass(typeName))
+    {
+        std::ostringstream oss;
+        oss << "Semantic error: Instantiating unkown class name " << typeName << ".";
+        printSemanticError(oss.str());
+        return false;
+    }
     type = new Type(Type::TypeName::Custom);
     type->SetTypeCustom(typeName);
+    scope = parentScope;
 
     return noError;
 }
 
 /* ObjectId */
-bool ObjectId::CheckSemantics()
+bool ObjectId::checkSemantics(__attribute__((unused))ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
-    bool noError = true;
+    type = parentScope->lookup(id);
+    scope = parentScope;
 
-    // TODO FIND METHOD
-    // type = new Type(/*method type*/);
-
-    return noError;
+    return true;
 }
 
 /* Call */
-bool Call::CheckSemantics()
+bool Call::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
+    std::ostringstream oss;
 
-    // TODO FIND METHOD
-    // type = new Type(/*method type*/);
+    // First, check the semantics of the caller expression
+    noError &= caller->checkSemantics(classSymbols, parentScope);
+
+    // Determine the type of the caller
+    Type* callerType = caller->type;
+    if (!callerType) {
+        oss << "Semantic error: Type of caller is undefined.";
+        printSemanticError(oss.str());
+        return false;  // Cannot proceed if the type of caller is unknown
+    }
+
+    // Get the class of the caller if the caller is of a custom type
+    Class* callerClass = nullptr;
+    if (callerType->getType() == Type::TypeName::Custom) {
+        callerClass = classSymbols->getClass(callerType->getStringTypeName());
+        if (!callerClass) {
+            oss << "Semantic error: Class " << callerType->getStringTypeName() << " not found.";
+            printSemanticError(oss.str());
+            return false;
+        }
+    }
+
+    // Check if the method exists within the caller class or parent classes
+    Method* method = callerClass ? callerClass->getMethod(methodName, classSymbols) : nullptr;
+    if (!method) {
+        oss << "Semantic error: Method " << methodName << " not found in class " << callerType->getStringTypeName() << ".";
+        printSemanticError(oss.str());
+        return false;
+    }
+
+    // Check the argument types
+    const std::vector<Formal*>& formals = method->getFormals();
+    if (formals.size() != args.size()) {
+        oss << "Semantic error: Argument count mismatch in call to method " << methodName << ". Expected " << formals.size() << " but got " << args.size() << ".";
+        printSemanticError(oss.str());
+        return false;
+    }
+
+    for (size_t i = 0; i < args.size(); ++i) {
+        noError &= args[i]->checkSemantics(classSymbols, parentScope);
+        if (args[i]->type->getType() != formals[i]->getType()->getType()) {
+            oss << "Semantic error: Type mismatch for argument " << i + 1 << " in call to method " << methodName << ". Expected " << formals[i]->getType()->getStringTypeName() << " but got " << args[i]->type->getStringTypeName() << ".";
+            printSemanticError(oss.str());
+            noError = false;
+        }
+    }
+
+    // Set the type of the call expression to the return type of the method
+    type = method->getReturnType();
 
     return noError;
 }
 
+
 /* Field */
-bool Field::checkSemantics(const ClassSymbolTable &classSymbols)
+bool Field::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
-    if (type->getType() == Type::TypeName::Custom && !classSymbols.getClass(type->getStringTypeName()))
+    if (type->getType() == Type::TypeName::Custom && !classSymbols->getClass(type->getStringTypeName()))
     {
         std::ostringstream oss;
         oss << "Semantic error: Unknown type " << type->getStringTypeName()
@@ -324,29 +392,32 @@ bool Field::checkSemantics(const ClassSymbolTable &classSymbols)
         printSemanticError(oss.str());
         return false;
     }
-    initExpr->CheckSemantics();
+    if(initExpr)
+        initExpr->checkSemantics(classSymbols, parentScope);
+    scope = parentScope;
     return true;
 }
 /* Formal */
-bool Formal::checkSemantics(const ClassSymbolTable &classSymbols)
+bool Formal::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
 
-    if (type->getType() == Type::TypeName::Custom && !classSymbols.hasClass(type->getStringTypeName()))
+    if (type->getType() == Type::TypeName::Custom && !classSymbols->hasClass(type->getStringTypeName()))
     {
         std::ostringstream oss;
         oss << "Unknown type '" << type->getStringTypeName() << "' used in formal parameter '" << name << "'.";
         printSemanticError(oss.str());
         noError = false;
     }
+    scope = parentScope;
 
     return noError;
 }
 
 /* Method */
-bool Method::checkMethodTypeDefinitions(const ClassSymbolTable &classSymbols)
+bool Method::checkMethodTypeDefinitions(ClassSymbolTable* classSymbols)
 {
-    if (returnType->getType() == Type::TypeName::Custom && !classSymbols.getClass(returnType->getStringTypeName()))
+    if (returnType->getType() == Type::TypeName::Custom && !classSymbols->getClass(returnType->getStringTypeName()))
     {
         std::ostringstream oss;
         oss << "Unknown return type " << returnType->getStringTypeName()
@@ -357,39 +428,32 @@ bool Method::checkMethodTypeDefinitions(const ClassSymbolTable &classSymbols)
     return true;
 }
 
-bool Method::checkFormalParameterRedefinitions()
+
+bool Method::checkFormalSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
-    std::set<std::string> parameterNames;
     bool noError = true;
     for (auto *formal : formals)
     {
-        if (!parameterNames.insert(formal->getName()).second)
-        {
+        if (!parentScope->addSymbol(formal->getName(), formal->getType())) {
             std::cerr << "Semantic error: Redefinition of formal parameter '" << formal->getName()
-                      << "' in method '" << name << "'.\n";
+                      << "' in method '" << name << "' .\n";
             noError = false;
         }
+        noError &= formal->checkSemantics(classSymbols, parentScope);
     }
     return noError;
 }
 
-bool Method::checkFormalSemantics(const ClassSymbolTable &classSymbols)
+bool Method::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
-    for (auto *formal : formals)
-    {
-        noError &= formal->checkSemantics(classSymbols);
-    }
-    return noError;
-}
+    // Create a new scope for this method
+    ProgramScope* methodScope= new ProgramScope(parentScope);
 
-bool Method::checkSemantics(const ClassSymbolTable &classSymbols)
-{
-    bool noError = true;
     noError &= checkMethodTypeDefinitions(classSymbols);
-    noError &= checkFormalParameterRedefinitions();
-    noError &= checkFormalSemantics(classSymbols);
-    noError &= body->CheckSemantics();
+    noError &= checkFormalSemantics(classSymbols, methodScope);
+    noError &= body->checkSemantics(classSymbols, methodScope);
+    scope = parentScope;
     return noError;
 }
 
@@ -419,7 +483,7 @@ bool Class::areSignaturesEqual(Method *m1, Method *m2)
     return true;
 }
 
-bool Class::checkInheritanceSemantic(const ClassSymbolTable &classSymbols)
+bool Class::checkInheritanceSemantic(ClassSymbolTable* classSymbols)
 {
     std::set<std::string> visited;
     std::string current = name;
@@ -436,7 +500,7 @@ bool Class::checkInheritanceSemantic(const ClassSymbolTable &classSymbols)
         }
         visited.insert(current);
 
-        Class *parentClass = classSymbols.getClass(current);
+        Class *parentClass = classSymbols->getClass(current);
         if (!parentClass)
         {
             std::ostringstream oss;
@@ -450,23 +514,8 @@ bool Class::checkInheritanceSemantic(const ClassSymbolTable &classSymbols)
     return noError;
 }
 
-bool Class::checkFieldRedefinitions()
-{
-    bool noError = true;
-    std::set<std::string> fieldNames;
-    for (auto *field : fields)
-    {
-        if (!fieldNames.insert(field->getName()).second)
-        {
-            std::cerr << "Semantic error: Redefinition of field '" << field->getName()
-                      << "' in class '" << name << "'." << std::endl;
-            noError = false;
-        }
-    }
-    return noError;
-}
 
-bool Class::checkMethodSignatures(const ClassSymbolTable &classSymbols)
+bool Class::checkMethodSignatures(ClassSymbolTable* classSymbols)
 {
     bool noError = true;
     std::map<std::string, Method *> methodSignatures;
@@ -482,7 +531,7 @@ bool Class::checkMethodSignatures(const ClassSymbolTable &classSymbols)
     }
 
     // Check against parent class methods
-    Class *parentClass = classSymbols.getClass(parent);
+    Class *parentClass = classSymbols->getClass(parent);
     while (parentClass)
     {
         for (auto *parentMethod : parentClass->getMethods())
@@ -497,32 +546,52 @@ bool Class::checkMethodSignatures(const ClassSymbolTable &classSymbols)
                 noError = false;
             }
         }
-        parentClass = classSymbols.getClass(parentClass->getParent());
+        parentClass = classSymbols->getClass(parentClass->getParent());
     }
     return noError;
 }
 
-bool Class::checkClassDefinitionsSemantics(const ClassSymbolTable &classSymbols)
+bool Class::checkClassDefinitionsSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
     for (auto *field : fields)
     {
-        noError &= field->checkSemantics(classSymbols);
+        if (!parentScope->addSymbol(field->getName(), field->getType())) {
+            std::cerr << "Semantic error: Redefinition of field '" << field->getName() << "' in class '" << name << "'." << std::endl;
+            noError = false;
+        }
+        noError &= field->checkSemantics(classSymbols, parentScope);
     }
     for (auto *method : methods)
     {
-        noError &= method->checkSemantics(classSymbols);
+        noError &= method->checkSemantics(classSymbols, parentScope);
     }
     return noError;
 }
 
-bool Class::checkSemantics(const ClassSymbolTable &classSymbols)
+bool Class::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
     bool noError = true;
     noError &= checkInheritanceSemantic(classSymbols);
-    noError &= checkFieldRedefinitions();
     noError &= checkMethodSignatures(classSymbols);
-    noError &= checkClassDefinitionsSemantics(classSymbols);
+
+    scope = new ProgramScope(parentScope);
+
+    // If the class has a parent, we need to inherit the scope from the parent
+    if (!parent.empty() && parent != "Object") {
+        Class* parentClass = classSymbols->getClass(parent);
+        if (parentClass) {
+            ProgramScope* parentClassScope = new ProgramScope(parentScope);
+            noError &= parentClass->checkSemantics(classSymbols, parentClassScope);
+            scope->setParentScope(parentClassScope);
+        } 
+    }
+
+    Type* currentType = new Type(Type::TypeName::Custom);
+    currentType->SetTypeCustom(name);
+    scope->addSymbol("self", currentType);
+
+    noError &= checkClassDefinitionsSemantics(classSymbols, scope);
 
     return noError;
 }
@@ -530,10 +599,11 @@ bool Class::checkSemantics(const ClassSymbolTable &classSymbols)
 /* Program */
 Class *Program::createObjectClass() const
 {
+    Type* objectType = new Type("Object");
     std::vector<Method *> methods = {
-        new Method("print", {new Formal("s", new Type(Type::TypeName::String))}, new Type("Object"), new Block({})),
-        new Method("printBool", {new Formal("b", new Type(Type::TypeName::Bool))}, new Type("Object"), new Block({})),
-        new Method("printInt32", {new Formal("i", new Type(Type::TypeName::Int32))}, new Type("Object"), new Block({})),
+        new Method("print", {new Formal("s", new Type(Type::TypeName::String))}, objectType, new Block({})),
+        new Method("printBool", {new Formal("b", new Type(Type::TypeName::Bool))}, objectType, new Block({})),
+        new Method("printInt32", {new Formal("i", new Type(Type::TypeName::Int32))}, objectType, new Block({})),
         new Method("inputLine", {}, new Type(Type::TypeName::String), new Block({})),
         new Method("inputBool", {}, new Type(Type::TypeName::Bool), new Block({})),
         new Method("inputInt32", {}, new Type(Type::TypeName::Int32), new Block({}))
@@ -541,17 +611,18 @@ Class *Program::createObjectClass() const
     return new Class("Object", {}, methods, "");
 }
 
-bool Program::checkSemantics()
+bool Program::checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope)
 {
+    parentScope = new ProgramScope();
     bool noError = true;
-    ClassSymbolTable classSymbols;
+    classSymbols = new ClassSymbolTable();
     Class *objectClass = createObjectClass();
-    classSymbols.addClass(objectClass->getName(), objectClass);
+    classSymbols->addClass(objectClass->getName(), objectClass);
 
     // Add all classes to the symbol table, report redefinitions
     for (auto *cls : classes)
     {
-        if (!classSymbols.addClass(cls->getName(), cls))
+        if (!classSymbols->addClass(cls->getName(), cls))
         {
             std::ostringstream oss;
             oss << cls->getName() << " is redefined.";
@@ -562,8 +633,10 @@ bool Program::checkSemantics()
 
     for (auto *cls : classes)
     {
-        noError &= cls->checkSemantics(classSymbols);
+        ProgramScope* classScope = new ProgramScope(parentScope);
+        noError &= cls->checkSemantics(classSymbols, classScope);
     }
 
+    scope = parentScope;
     return noError;
 }

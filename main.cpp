@@ -15,7 +15,7 @@ enum class Mode
 static const map<string, Mode> flag_to_mode = {
     {"-l", Mode::LEX},
     {"-p", Mode::PARSE},
-    {"-s", Mode::SEMANTIC},
+    {"-c", Mode::SEMANTIC},
 };
 
 int main(int argc, char const *argv[])
@@ -40,7 +40,7 @@ int main(int argc, char const *argv[])
     }
     else
     {
-        cerr << "Usage: " << argv[0] << " [-l|-p|-s] <source_file>" << endl;
+        cerr << "Usage: " << argv[0] << " [-l|-p|-c] <source_file>" << endl;
         return -1;
     }
 
@@ -65,11 +65,12 @@ int main(int argc, char const *argv[])
         res = driver.parse();
 
         if (res == 0){
-            if(!driver.result->checkSemantics())
+            if(!driver.result->checkSemantics(nullptr, nullptr))
                 res = -1;
         }
-
-        cout << driver.result->print() << endl;
+        if (res == 0){
+            cout << driver.result->print() << endl;
+        }
 
         return res;    
     }

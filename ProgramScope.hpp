@@ -2,7 +2,7 @@
 #define PROGRAM_SCOPE_H
 
 #include <map>
-
+#include "ASTClasses.hpp"
 class Type;
 
 class ProgramScope {
@@ -31,6 +31,10 @@ public:
             currentScope = currentScope->parentScope;
         }
         return nullptr;
+    }
+
+    void setParentScope(ProgramScope* parent){
+        parentScope = parent;
     }
 };
 #endif
