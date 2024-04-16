@@ -33,7 +33,7 @@ public:
         oss << pos.fileName << ":"
             << pos.line << ":"
             << pos.column << ": "
-            << "Semantic error: "
+            << "semantic error: "
             << message
             << std::endl;
         std::cerr << oss.str();
@@ -116,7 +116,7 @@ public:
         if(type){
           return str + " : " + type->getStringTypeName();
         }
-        return str + " : TypeUndefined";
+        return str;
     }
 };
 
@@ -436,12 +436,13 @@ private:
     int value;
 
 public:
-    IntegerLiteral(int value) : value(value) { type = new Type(Type::TypeName::Int32); }
+    IntegerLiteral(int value) : value(value) { }
 
     std::string print() const override
     {
         return tryAddTypeToPrint(std::to_string(value));
     }
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class StringLiteral : public Literal
@@ -450,12 +451,13 @@ private:
     std::string value;
 
 public:
-    StringLiteral(const std::string &value) : value(value) { type = new Type(Type::TypeName::String); }
+    StringLiteral(const std::string &value) : value(value) { }
 
     std::string print() const override
     {
         return tryAddTypeToPrint(value);
     }
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class BooleanLiteral : public Literal
@@ -464,22 +466,24 @@ private:
     bool value;
 
 public:
-    BooleanLiteral(bool value) : value(value) { type = new Type(Type::TypeName::Bool); }
+    BooleanLiteral(bool value) : value(value) {}
 
     std::string print() const override
     {
         return tryAddTypeToPrint(value ? "true" : "false");
     }
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class UnitLiteral : public Literal
 {
 public:
-    UnitLiteral() { type = new Type(Type::TypeName::Unit); }
+    UnitLiteral() { }
     std::string print() const override
     {
         return tryAddTypeToPrint("()");
     }
+    bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
 class Field : public ASTNode
@@ -594,7 +598,7 @@ private:
     bool areSignaturesEqual(Method *m1, Method *m2);
     bool checkInheritanceSemantic(ClassSymbolTable* classSymbols);
     bool checkMethodSignatures(ClassSymbolTable* classSymbols);
-    bool checkClassDefinitionsSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope);
+    bool checkClassFieldsSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope);
 
 public:
     Class(const std::string &name,
@@ -630,12 +634,13 @@ public:
                 return method;
             }
         }
+        Class* parentClass = classSymbols->getClass(parent);
 
-        if (!parent.empty()) {
-            Class* parentClass = classSymbols->getClass(parent);
-            if (parentClass) {
-                return parentClass->getMethod(methodName, classSymbols);
-            }
+        while (parentClass) {
+            Method* method =  parentClass->getMethod(methodName, classSymbols);
+            if(method)
+                return method;
+            parentClass = classSymbols->getClass(parentClass->getParent());
         }
 
         return nullptr;
@@ -649,6 +654,7 @@ private:
 
 private:
     Class *createObjectClass() const;
+    bool checkMainClass(ClassSymbolTable* classSymbols);
 
 public:
     Program(std::vector<Class *> classes)

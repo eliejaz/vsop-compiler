@@ -182,6 +182,7 @@ expressions:
 expression:
      block                                { $$ = $1; }
     | LPAR expression RPAR                { $$ = $2; }
+    | LPAR RPAR                           { $$ = new UnitLiteral();setAstNodePostition($$, yyla.location); }
     | INTEGERLITERAL                      { $$ = new IntegerLiteral($1);setAstNodePostition($$, yyla.location); }
     | STRINGLITERAL                       { $$ = new StringLiteral($1);setAstNodePostition($$, yyla.location); }
     | TRUE                                { $$ = new BooleanLiteral(true);setAstNodePostition($$, yyla.location); }
