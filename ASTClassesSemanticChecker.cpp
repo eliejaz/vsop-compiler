@@ -59,7 +59,7 @@ bool Type::isCompatibleWith(const Type *other, ClassSymbolTable *classSymbols) c
 /* Block */
 bool Block::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentScope)
 {
-    ProgramScope *blockScope = new ProgramScope(parentScope);
+    ProgramScope *blockScope = new ProgramScope(parentScope, "block");
     bool noError = true;
     for (auto *exp : expressions)
     {
@@ -146,7 +146,7 @@ bool While::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
 bool Let::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentScope)
 {
     bool noError = true;
-    ProgramScope *letScope = new ProgramScope(parentScope);
+    ProgramScope *letScope = new ProgramScope(parentScope, "let");
     letScope->addSymbol(name, letType);
 
     if (letType->getType() == Type::TypeName::Custom && !classSymbols->hasClass(letType->getStringTypeName()))
@@ -374,6 +374,20 @@ bool ObjectId::checkSemantics(__attribute__((unused)) ClassSymbolTable *classSym
         oss << "Use of unbounded variable: " << id << ".";
         printSemanticError(oss.str());
     }
+    if (type && parentScope->lookupLevelName(id) == "class" && parentScope->inFieldInitializer)
+    {
+        noError = false;
+        std::ostringstream oss;
+        oss << "cannot use class fields in field initializers: " << id << ".";
+        printSemanticError(oss.str());
+    }
+    if (id == "self" && parentScope->inFieldInitializer)
+    {
+        std::ostringstream oss;
+        oss << "Canot use self.Call() in field initialising";
+        printSemanticError(oss.str());
+        noError = false;
+    }
 
     scope = parentScope;
     return noError;
@@ -485,7 +499,9 @@ bool Field::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
     }
     if (initExpr)
     {
+        parentScope->inFieldInitializer = true;
         noError &= initExpr->checkSemantics(classSymbols, parentScope);
+        parentScope->inFieldInitializer = false;
 
         if (initExpr->type && !initExpr->type->isCompatibleWith(type, classSymbols))
         {
@@ -555,7 +571,7 @@ bool Method::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
 {
     bool noError = true;
     // Create a new scope for this method
-    ProgramScope *methodScope = new ProgramScope(parentScope);
+    ProgramScope *methodScope = new ProgramScope(parentScope, "method");
 
     noError &= checkMethodTypeDefinitions(classSymbols);
     noError &= checkFormalSemantics(classSymbols, methodScope);
@@ -707,7 +723,7 @@ bool Class::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
     noError &= checkInheritanceSemantic(classSymbols);
     noError &= checkMethodSignatures(classSymbols);
 
-    scope = new ProgramScope(parentScope);
+    scope = new ProgramScope(parentScope, "class");
 
     // If the class has a parent, we need to inherit the scope from the parent
     if (parent != "Object")

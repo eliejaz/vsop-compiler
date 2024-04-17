@@ -399,7 +399,7 @@ public:
     {
         return tryAddTypeToPrint(id);
     }
-
+    std::string getId(){return id;}
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 

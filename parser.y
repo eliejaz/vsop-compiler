@@ -208,7 +208,12 @@ expression:
     | LET OBJECTIDENTIFIER COLON all_types IN expression { $$ = new Let($2, $4, $6);setAstNodePostition($$, yyla.location); }
     | LET OBJECTIDENTIFIER COLON all_types ASSIGN expression IN expression { $$ = new Let($2, $4, $8, $6);setAstNodePostition($$, yyla.location); }
     | NEW TYPEIDENTIFIER { $$ = new New($2);setAstNodePostition($$, yyla.location); }
-    | OBJECTIDENTIFIER LPAR func_arguments RPAR { $$ = new Call($1, $3);setAstNodePostition($$, yyla.location); }
+    | OBJECTIDENTIFIER LPAR func_arguments RPAR { 
+        Expression* caller = new ObjectId("self");
+        setAstNodePostition(caller, yyla.location); 
+        $$ = new Call($1, $3, caller); 
+        setAstNodePostition($$, yyla.location); 
+        }
     | expression DOT OBJECTIDENTIFIER LPAR func_arguments RPAR { $$ = new Call($3, $5, $1);setAstNodePostition($$, yyla.location); }
     ;
 

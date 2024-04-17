@@ -9,11 +9,12 @@ class Type;
 class ProgramScope {
 
 public:
-    bool inFieldInitializer;
+    bool inFieldInitializer = false;
     std::map<std::string, Type*> symbolToTypeMap;
     ProgramScope* parentScope;
+    std:: string scopeLevelName;
 
-    ProgramScope(ProgramScope* parent = nullptr) : parentScope(parent) {}
+    ProgramScope(ProgramScope* parent = nullptr, std:: string scopeLevelName = "class"): parentScope(parent), scopeLevelName(scopeLevelName)  {}
 
    bool addSymbol(const std::string& name, Type* type) {
         ProgramScope* currentScope = this;
@@ -33,6 +34,18 @@ public:
             auto it = currentScope->symbolToTypeMap.find(name);
             if (it != currentScope->symbolToTypeMap.end()) {
                 return it->second;
+            }
+            currentScope = currentScope->parentScope;
+        }
+        return nullptr;
+    }
+
+    std::string lookupLevelName(const std::string& name) {
+        ProgramScope* currentScope = this;
+        while (currentScope != nullptr) {
+            auto it = currentScope->symbolToTypeMap.find(name);
+            if (it != currentScope->symbolToTypeMap.end()) {
+                return currentScope->scopeLevelName;
             }
             currentScope = currentScope->parentScope;
         }
