@@ -1,6 +1,7 @@
 CXX 			= clang++
 
-CXXFLAGS 		= -Wall -Wextra
+CXXFLAGS        = -Wall -Wextra $(shell llvm-config --cxxflags) -Wno-unused-parameter
+LDFLAGS         = $(shell llvm-config --ldflags --libs --system-libs)
 
 BISONFLAGS 		= -d
 
@@ -10,7 +11,8 @@ SRC				= main.cpp \
 				  driver.cpp \
 				  parser.cpp \
 				  lexer.cpp \
-				  ASTClassesSemanticChecker.cpp
+				  ASTClassesSemanticChecker.cpp \
+				  ASTClassesCodeGenerator.cpp
 
 OBJ	  			= $(SRC:.cpp=.o)
 
@@ -25,7 +27,9 @@ parser.o: driver.hpp parser.hpp
 
 lexer.o: driver.hpp parser.hpp
 
-ASTClassesSemanticChecker.o: driver.hpp parser.hpp ASTClasses.hpp
+ASTClassesSemanticChecker.o: driver.hpp parser.hpp ASTClasses.hpp ProgramScope.hpp
+
+ASTClassesCodeGenerator.o: driver.hpp parser.hpp ASTClasses.hpp CodeGenerator.hpp
 
 
 $(EXEC): $(OBJ)

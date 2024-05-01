@@ -9,13 +9,15 @@ enum class Mode
 {
     LEX,
     PARSE,
-    SEMANTIC
+    SEMANTIC,
+    GENERATE
 };
 
 static const map<string, Mode> flag_to_mode = {
     {"-l", Mode::LEX},
     {"-p", Mode::PARSE},
     {"-c", Mode::SEMANTIC},
+    {"-i", Mode::GENERATE},
 };
 
 int main(int argc, char const *argv[])
@@ -72,6 +74,16 @@ int main(int argc, char const *argv[])
             cout << driver.result->print() << endl;
         }
 
+        return res;    
+    case Mode::GENERATE:
+        res = driver.parse();
+        if (res == 0){
+            if(!driver.result->checkSemantics(nullptr, nullptr))
+                res = -1;
+        }
+        if (res == 0){
+            driver.result->codegen();
+        }
         return res;    
     }
 

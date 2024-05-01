@@ -10,6 +10,8 @@
 #include <iomanip>
 #include "ClassSymbolTable.hpp"
 #include "ProgramScope.hpp"
+#include "CodeGenerator.hpp"
+#include <llvm/Support/raw_ostream.h>
 
 struct Position
 {
@@ -105,6 +107,7 @@ public:
     std::string print() const override { return getStringTypeName(); }
     bool isSubtypeOf(const Type* base, ClassSymbolTable* classSymbols) const;
     bool isCompatibleWith(const Type* other, ClassSymbolTable* classSymbols) const;
+    llvm::Type* typeToLLVM(CodeGenerator& generator);
 };
 
 class Expression : public ASTNode
@@ -117,6 +120,9 @@ public:
           return str + " : " + type->getStringTypeName();
         }
         return str;
+    }
+    virtual llvm::Value* codegen(__attribute__((unused))CodeGenerator& generator){
+        return nullptr;
     }
 };
 
@@ -443,6 +449,7 @@ public:
         return tryAddTypeToPrint(std::to_string(value));
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
 };
 
 class StringLiteral : public Literal
@@ -458,6 +465,7 @@ public:
         return tryAddTypeToPrint(value);
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
 };
 
 class BooleanLiteral : public Literal
@@ -473,6 +481,8 @@ public:
         return tryAddTypeToPrint(value ? "true" : "false");
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class UnitLiteral : public Literal
@@ -484,6 +494,7 @@ public:
         return tryAddTypeToPrint("()");
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
 };
 
 class Field : public ASTNode
@@ -584,6 +595,8 @@ public:
         return oss.str();
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+
+   llvm::Value* codegen(CodeGenerator& generator, std::string className);
 };
 
 class Class : public ASTNode
@@ -628,6 +641,7 @@ public:
     }
 
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+
     Method* getMethod(const std::string& methodName, ClassSymbolTable* classSymbols) {
         for (Method* method : methods) {
             if (method->getName() == methodName) {
@@ -645,6 +659,9 @@ public:
 
         return nullptr;
     }
+
+    void codegen(CodeGenerator& generator);
+    llvm::Function* createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className);
 };
 
 class Program : public ASTNode
@@ -674,5 +691,7 @@ public:
     }
 
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+
+    void codegen();
 };
 #endif

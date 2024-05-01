@@ -1,10 +1,7 @@
-driver.o
-lexer.o
-main.o
-parser.o
-ASTClassesSemanticChecker.o
+*.o
 parser.cpp
 parser.hpp
 lexer.cpp
 location.hh
 vsopc
+*.ll
