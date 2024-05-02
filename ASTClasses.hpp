@@ -26,7 +26,7 @@ class ASTNode
 public:
     Position pos;
     ProgramScope* scope;
-    virtual ~ASTNode() {}
+    virtual ~ASTNode() {delete scope;}
     virtual std::string print() const = 0;
     void setPosition(const Position &position) { pos = position; }
     void printSemanticError(const std::string &message) const
@@ -72,7 +72,8 @@ public:
         Bool,
         String,
         Unit,
-        Custom
+        Custom,
+        UNDEFINED
     };
 
 private:
@@ -101,7 +102,7 @@ public:
         case TypeName::Custom:
             return customTypeName;
         default:
-            return "unknown";
+            return "UNDEFINED";
         }
     }
     std::string print() const override { return getStringTypeName(); }
@@ -113,11 +114,11 @@ public:
 class Expression : public ASTNode
 {
 public:
-    Type *type;
+    Type *type = new Type(Type::TypeName::UNDEFINED);
     virtual ~Expression() {}
     std::string tryAddTypeToPrint(std::string str) const{
-        if(type){
-          return str + " : " + type->getStringTypeName();
+        if(type && type->getType() != Type::TypeName::UNDEFINED){
+            return str + " : " + type->getStringTypeName();
         }
         return str;
     }
@@ -154,6 +155,7 @@ public:
         return tryAddTypeToPrint(joinASTNodes(expressions));
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
 };
 
 class If : public Expression
@@ -692,6 +694,6 @@ public:
 
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 
-    void codegen();
+    void codegen(CodeGenerator& generator);
 };
 #endif

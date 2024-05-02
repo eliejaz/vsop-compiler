@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include "CodeGenerator.hpp"
 
 #include "driver.hpp"
 
@@ -10,7 +11,8 @@ enum class Mode
     LEX,
     PARSE,
     SEMANTIC,
-    GENERATE
+    GENERATE,
+    GENERATEFILE
 };
 
 static const map<string, Mode> flag_to_mode = {
@@ -27,7 +29,7 @@ int main(int argc, char const *argv[])
 
     if (argc == 2)
     {
-        mode = Mode::PARSE;
+        mode = Mode::GENERATEFILE;
         source_file = argv[1];
     }
     else if (argc == 3)
@@ -82,10 +84,38 @@ int main(int argc, char const *argv[])
                 res = -1;
         }
         if (res == 0){
-            driver.result->codegen();
+            CodeGenerator generator;
+            driver.result->codegen(generator);
+            generator.printLLVMCode();
         }
-        return res;    
+        return res; 
+case Mode::GENERATEFILE:
+    res = driver.parse();
+    if (res == 0){
+        if(!driver.result->checkSemantics(nullptr, nullptr))
+            res = -1;
     }
+    if (res == 0){
+        CodeGenerator generator;
+        driver.result->codegen(generator);
+
+        std::string currentFileName = driver.result->pos.fileName;
+        size_t lastPeriodIndex = currentFileName.rfind('.');
+        if (lastPeriodIndex != std::string::npos && lastPeriodIndex != 0) {
+            // Erase the extension
+            currentFileName.erase(lastPeriodIndex);
+        }
+        std::string llFileName = currentFileName + ".ll";
+        std::string executableName = currentFileName;
+
+        generator.printLLVMCodeToFile(llFileName);
+
+        std::string llcCommand = "clang -o " + executableName + " " + llFileName;
+        system(llcCommand.c_str());
+    }
+    return res;            
+    }
+
 
     return 0;
 }

@@ -1,14 +1,5 @@
-
-class Cons{
-head : int32;
-init(hd : int32) : Cons {
-head <- hd;
-self
-}
-}
 class Main {
-main() : int32 {
-    print("HELLO WORLD!");
-0
-}
+    main() : int32 {
+        0
+    }
 }

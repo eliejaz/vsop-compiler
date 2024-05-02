@@ -20,6 +20,16 @@ llvm::Type *Type::typeToLLVM(CodeGenerator &generator)
     }
 }
 
+/* Block */
+llvm::Value* Block::codegen(CodeGenerator& generator)
+{
+    llvm::Value* finalValue;
+    for(auto& expr : expressions){
+        finalValue = expr->codegen(generator);
+    }
+    return finalValue;
+}
+
 /* IntegerLiteral */
 llvm::Value *IntegerLiteral::codegen(CodeGenerator &generator)
 {
@@ -60,12 +70,11 @@ llvm::Value* Method::codegen(CodeGenerator& generator, std::string className) {
     generator.builder.SetInsertPoint(entry);
 
     // if (body) {
-    //     body->codegen(generator);
-    // llvm::Value* returnValue = body->codegen(generator, function, generator.builder);
-    // generator.builder.CreateRet(returnValue);
+    llvm::Value* returnValue = body->codegen(generator);
+    generator.builder.CreateRet(returnValue);
     // }
 
-    generator.builder.CreateRetVoid();
+    //generator.builder.CreateRetVoid();
 
 
     return function;
@@ -110,7 +119,7 @@ void Class::codegen(CodeGenerator& generator) {
     llvm::GlobalVariable *vTable = generator.module->getNamedGlobal(vtableName);
     vTable->setInitializer(llvm::ConstantStruct::get(vtableType, vtableMethods));
 
-    llvm::Function* classNewFunction = createClassNewFunction(generator, classType, vTable, name);
+    createClassNewFunction(generator, classType, vTable, name);
 
 }
 
@@ -127,7 +136,7 @@ llvm::Function* Class::createClassNewFunction(CodeGenerator& generator, llvm::St
     llvm::Value* vTablePtr = generator.builder.CreateStructGEP(classType, instance, 0, "vtable_ptr");
     generator.builder.CreateStore(vTable, vTablePtr);
 
-    // Initialize fields, if any specific initialization is required
+    // ToDo Initialize fields
 
     generator.builder.CreateRet(instance);
 
@@ -135,16 +144,37 @@ llvm::Function* Class::createClassNewFunction(CodeGenerator& generator, llvm::St
 }
 
 /* Program */
-void Program::codegen()
+void Program::codegen(CodeGenerator& generator)
 {
-    CodeGenerator generator;
-
     for (auto &klass : classes)
     {
         klass->codegen(generator);
     }
-    generator.printLLVMCode();
-    std::string llvmOutput = pos.fileName.replace(pos.fileName.find(".txt"), sizeof(".txt") - 1, ".ll");
-    generator.printLLVMCodeToFile(llvmOutput);
 
+    llvm::Function* mainFunc = llvm::Function::Create(
+        llvm::FunctionType::get(llvm::Type::getInt32Ty(generator.context), false),
+        llvm::Function::ExternalLinkage,
+        "main",
+        generator.module
+    );
+
+    // Entry block for the main function
+    llvm::BasicBlock* entry = llvm::BasicBlock::Create(generator.context, "entry", mainFunc);
+    generator.builder.SetInsertPoint(entry);
+
+    // Create an instance of Main class
+    llvm::Function* mainNew = generator.module->getFunction("Main_new");
+    llvm::Value* mainInstance = generator.builder.CreateCall(mainNew, {}, "mainInstance");
+
+    // Call the main() method of Main class
+    llvm::Function* mainMethod = generator.module->getFunction("Main_main");
+    generator.builder.CreateCall(mainMethod, {mainInstance});
+
+    // Declare printf function to print "Done"
+    llvm::Value* str = generator.builder.CreateGlobalStringPtr("Done\n");
+    llvm::FunctionCallee printfFunc = generator.module->getOrInsertFunction("printf", llvm::FunctionType::get(llvm::Type::getInt32Ty(generator.context), llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(generator.context)), true));
+    generator.builder.CreateCall(printfFunc, {str});
+
+    // End the main function
+    generator.builder.CreateRet(llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0, true)));
 }
