@@ -158,15 +158,14 @@ void Program::codegen(CodeGenerator& generator)
         generator.module
     );
 
-    // Entry block for the main function
+    // create main entry point function
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(generator.context, "entry", mainFunc);
     generator.builder.SetInsertPoint(entry);
 
-    // Create an instance of Main class
     llvm::Function* mainNew = generator.module->getFunction("Main_new");
     llvm::Value* mainInstance = generator.builder.CreateCall(mainNew, {}, "mainInstance");
 
-    // Call the main() method of Main class
+    // Call the main() method 
     llvm::Function* mainMethod = generator.module->getFunction("Main_main");
     generator.builder.CreateCall(mainMethod, {mainInstance});
 
@@ -175,6 +174,5 @@ void Program::codegen(CodeGenerator& generator)
     llvm::FunctionCallee printfFunc = generator.module->getOrInsertFunction("printf", llvm::FunctionType::get(llvm::Type::getInt32Ty(generator.context), llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(generator.context)), true));
     generator.builder.CreateCall(printfFunc, {str});
 
-    // End the main function
     generator.builder.CreateRet(llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0, true)));
 }

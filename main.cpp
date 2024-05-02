@@ -84,7 +84,13 @@ int main(int argc, char const *argv[])
                 res = -1;
         }
         if (res == 0){
-            CodeGenerator generator;
+            std::string currentFileName = driver.result->pos.fileName;
+            size_t lastPeriodIndex = currentFileName.rfind('.');
+            if (lastPeriodIndex != std::string::npos && lastPeriodIndex != 0) {
+                // Erase the extension
+                currentFileName.erase(lastPeriodIndex);
+            }
+            CodeGenerator generator(currentFileName);
             driver.result->codegen(generator);
             generator.printLLVMCode();
         }
@@ -96,15 +102,16 @@ case Mode::GENERATEFILE:
             res = -1;
     }
     if (res == 0){
-        CodeGenerator generator;
-        driver.result->codegen(generator);
-
         std::string currentFileName = driver.result->pos.fileName;
         size_t lastPeriodIndex = currentFileName.rfind('.');
         if (lastPeriodIndex != std::string::npos && lastPeriodIndex != 0) {
             // Erase the extension
             currentFileName.erase(lastPeriodIndex);
         }
+        CodeGenerator generator(currentFileName);
+        driver.result->codegen(generator);
+
+
         std::string llFileName = currentFileName + ".ll";
         std::string executableName = currentFileName;
 

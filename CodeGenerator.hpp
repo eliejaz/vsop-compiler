@@ -12,8 +12,8 @@ public:
     llvm::Module* module;
     llvm::IRBuilder<> builder;
 
-    CodeGenerator()
-        : module(new llvm::Module("MyProgram", context)), builder(context) {}
+    CodeGenerator(std::string fileName)
+        : module(new llvm::Module(fileName, context)), builder(context) {}
 
     llvm::Type* handleCustomType(const std::string& name) {
         llvm::StructType* structType = llvm::StructType::getTypeByName(context, name);
