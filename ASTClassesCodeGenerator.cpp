@@ -138,7 +138,6 @@ void Class::codegen(CodeGenerator& generator) {
     std::vector<llvm::Type *> methodTypes;
     for (auto& method : allMethods) {
         std::string callerName = method->caller->getName();
-        if (callerName == "Object") continue;
 
         llvm::Function* methodFunc = generator.module->getFunction(llvm::StringRef(callerName+ "_" + method->getName()));
         vtableMethods.push_back(methodFunc);
@@ -199,10 +198,16 @@ void Program::codegen(CodeGenerator& generator)
     llvm::Function* mainMethod = generator.module->getFunction("Main_main");
     generator.builder.CreateCall(mainMethod, {mainInstance});
 
-    // Declare printf function to print "Done"
-    llvm::Value* str = generator.builder.CreateGlobalStringPtr("Done\n");
-    llvm::FunctionCallee printfFunc = generator.module->getOrInsertFunction("printf", llvm::FunctionType::get(llvm::Type::getInt32Ty(generator.context), llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(generator.context)), true));
-    generator.builder.CreateCall(printfFunc, {str});
+    llvm::StructType* objectType = llvm::StructType::getTypeByName(generator.context, "Object");
+    llvm::Value* objectInstance = generator.builder.CreateBitCast(mainInstance, llvm::PointerType::get(objectType, 0), "objectInstanceCast");
+
+
+     llvm::Value* str = generator.builder.CreateGlobalStringPtr("Done printing using object.\n", "doneString");
+     llvm::Function* objectPrint = generator.module->getFunction("Object_print");
+    generator.builder.CreateCall(objectPrint, {objectInstance, str});
+
+    // llvm::FunctionCallee printfFunc = generator.module->getOrInsertFunction("printf", llvm::FunctionType::get(llvm::Type::getInt32Ty(generator.context), llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(generator.context)), true));
+    // generator.builder.CreateCall(printfFunc, {str});
 
     generator.builder.CreateRet(llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0, true)));
 }
