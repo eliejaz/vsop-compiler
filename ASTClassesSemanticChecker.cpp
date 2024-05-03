@@ -651,6 +651,7 @@ bool Class::checkMethodSignatures(ClassSymbolTable *classSymbols)
     std::map<std::string, Method *> methodSignatures;
     for (auto *method : methods)
     {
+        method->caller = this;
         auto result = methodSignatures.insert({method->getName(), method});
         if (!result.second)
         {
@@ -663,10 +664,11 @@ bool Class::checkMethodSignatures(ClassSymbolTable *classSymbols)
     }
 
     // Check against parent class methods
-    Class *parentClass = classSymbols->getClass(parent);
-    while (parentClass)
+    Class *prnt = classSymbols->getClass(parent);
+    parentClass = prnt;
+    while (prnt)
     {
-        for (auto *parentMethod : parentClass->getMethods())
+        for (auto *parentMethod : prnt->getMethods())
         {
             auto it = methodSignatures.find(parentMethod->getName());
             if (it != methodSignatures.end() && !areSignaturesEqual(it->second, parentMethod))
@@ -678,7 +680,7 @@ bool Class::checkMethodSignatures(ClassSymbolTable *classSymbols)
                 noError = false;
             }
         }
-        parentClass = classSymbols->getClass(parentClass->getParent());
+        prnt = classSymbols->getClass(prnt->getParent());
     }
     return noError;
 }
@@ -761,6 +763,7 @@ bool Class::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
 Class *Program::createObjectClass() const
 {
     Type *objectType = new Type("Object");
+
     std::vector<Method *> methods = {
         new Method("print", {new Formal("s", new Type(Type::TypeName::String))}, objectType, new Block({})),
         new Method("printBool", {new Formal("b", new Type(Type::TypeName::Bool))}, objectType, new Block({})),
@@ -768,7 +771,12 @@ Class *Program::createObjectClass() const
         new Method("inputLine", {}, new Type(Type::TypeName::String), new Block({})),
         new Method("inputBool", {}, new Type(Type::TypeName::Bool), new Block({})),
         new Method("inputInt32", {}, new Type(Type::TypeName::Int32), new Block({}))};
-    return new Class("Object", {}, methods, "");
+    Class* objectClass =  new Class("Object", {}, methods, "");
+
+    for (auto *method : objectClass->getMethods())
+    {method->caller = objectClass;
+    }
+    return objectClass;
 }
 
 bool Program::checkMainClass(ClassSymbolTable *classSymbols)

@@ -54,8 +54,8 @@ llvm::Value *UnitLiteral::codegen(CodeGenerator &generator)
 }
 
 /* Method */
-llvm::Value* Method::codegen(CodeGenerator& generator, std::string className) {
-    llvm::StructType* classType = llvm::StructType::getTypeByName(generator.context, className);
+llvm::Value* Method::codegen(CodeGenerator& generator) {
+    llvm::StructType* classType = llvm::StructType::getTypeByName(generator.context, caller->getName());
     std::vector<llvm::Type*> paramTypes;
     paramTypes.push_back(classType->getPointerTo());
     for (auto& formal : formals) {
@@ -64,7 +64,7 @@ llvm::Value* Method::codegen(CodeGenerator& generator, std::string className) {
     }
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType->typeToLLVM(generator), paramTypes, false);
 
-    llvm::Function* function = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, className + "_" + name, generator.module);
+    llvm::Function* function = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "_" + name, generator.module);
 
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(generator.context, "entry", function);
     generator.builder.SetInsertPoint(entry);
@@ -81,21 +81,45 @@ llvm::Value* Method::codegen(CodeGenerator& generator, std::string className) {
 }
 
 /* CLass */
+
+void Class::collectMethods(std::vector<Method*>& allMethods) {
+    if (parentClass) {
+        parentClass->collectMethods(allMethods);
+    }
+    for (auto& method : methods) {
+        bool overridden = false;
+        for (size_t i = 0; i < allMethods.size(); i++) {
+            if (method->getName() == allMethods[i]->getName()) {
+                allMethods[i] = method;
+                overridden = true;
+                break;
+            }
+        }
+        if (!overridden) {
+            allMethods.push_back(method);
+        }
+    }
+}
+
+void Class::collectParentFields(std::vector<Field *>& allFields) {
+    if (parentClass) {
+        parentClass->collectParentFields(allFields);
+    }
+    // Add own fields
+    allFields.insert(allFields.end(), fields.begin(), fields.end());
+}
+
 void Class::codegen(CodeGenerator& generator) {
     std::vector<llvm::Type*> classFieldTypes;
-
-    // If the class has a parent, inherit fields and vtable pointer from the parent
-    if (parent != "Object") {
-        llvm::StructType* parentType = llvm::StructType::getTypeByName(generator.context, parent);
-        classFieldTypes.push_back(parentType->getPointerTo());
-    }
+    std::vector<Field *> allFields;
+    collectParentFields(allFields);
 
     std::string vtableName = "_Vtable" + name;
     llvm::StructType* vtableType = llvm::StructType::create(generator.context, vtableName);
     classFieldTypes.push_back(vtableType->getPointerTo());
 
     // Add types for each field in the current class
-    for (auto& field : fields) {
+    for (auto& field : allFields) {
         llvm::Type* fieldType = field->getType()->typeToLLVM(generator);
         classFieldTypes.push_back(fieldType);
     }
@@ -104,23 +128,29 @@ void Class::codegen(CodeGenerator& generator) {
     llvm::StructType* classType = llvm::StructType::create(generator.context, name);
     classType->setBody(classFieldTypes);
 
+    for (auto& method : methods) {
+       method->codegen(generator);
+    }
+
+    std::vector<Method*> allMethods;
+    collectMethods(allMethods);
     std::vector<llvm::Constant*> vtableMethods;
     std::vector<llvm::Type *> methodTypes;
+    for (auto& method : allMethods) {
+        std::string callerName = method->caller->getName();
+        if (callerName == "Object") continue;
 
-    for (auto& method : methods) {
-       llvm::Function *methodFunc = static_cast<llvm::Function*>(method->codegen(generator, name));
-       //generator.module->getFunction(llvm::StringRef(name+ "_" + method->getName()));
-
+        llvm::Function* methodFunc = generator.module->getFunction(llvm::StringRef(callerName+ "_" + method->getName()));
         vtableMethods.push_back(methodFunc);
         methodTypes.push_back(methodFunc->getType());
     }
+
     vtableType->setBody(methodTypes);
     generator.module->getOrInsertGlobal(vtableName, vtableType);
     llvm::GlobalVariable *vTable = generator.module->getNamedGlobal(vtableName);
     vTable->setInitializer(llvm::ConstantStruct::get(vtableType, vtableMethods));
 
     createClassNewFunction(generator, classType, vTable, name);
-
 }
 
 llvm::Function* Class::createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className) {

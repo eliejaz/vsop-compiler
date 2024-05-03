@@ -1,3 +1,15 @@
+class Animal {
+    animalField : int32;
+    isNil() : bool { true }
+    length() : int32 { 0 }
+}
+
+class Cat extends Animal {
+    catField : int32;
+    testCat() : int32 { 0 }
+    isNil() : bool { false }
+}
+
 class Main {
     main() : int32 {
         0

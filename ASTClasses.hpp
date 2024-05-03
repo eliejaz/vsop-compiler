@@ -568,6 +568,7 @@ private:
     bool checkFormalSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope);
 
 public:
+    Class *caller;
     Method(const std::string &name, std::vector<Formal *> formals,
            Type *returnType, Block *body)
         : name(name), formals(formals), returnType(returnType), body(body) {}
@@ -598,7 +599,7 @@ public:
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 
-   llvm::Value* codegen(CodeGenerator& generator, std::string className);
+   llvm::Value* codegen(CodeGenerator& generator);
 };
 
 class Class : public ASTNode
@@ -608,6 +609,7 @@ private:
     std::string parent;
     std::vector<Field *> fields;
     std::vector<Method *> methods;
+    Class* parentClass;
 
 private:
     bool areSignaturesEqual(Method *m1, Method *m2);
@@ -662,6 +664,8 @@ public:
         return nullptr;
     }
 
+    void collectMethods(std::vector<Method*>& allMethods);
+    void collectParentFields(std::vector<Field *>& allFields);
     void codegen(CodeGenerator& generator);
     llvm::Function* createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className);
 };
