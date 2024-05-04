@@ -6,12 +6,27 @@ class Animal {
 
 class Cat extends Animal {
     catField : int32;
-    testCat() : int32 { 0 }
+    testCat(a : int32) : int32 {
+        0
+    }
     isNil() : bool { false }
 }
 
 class Main {
+    test(a : int32) : int32{
+         a + 3
+    }
+    testIf(a : bool) : int32{
+        if a then
+            1
+        else
+            4
+    }
+
     main() : int32 {
+        printInt32(testIf(true));
+        print("HELLO WORLD!");
+
         0
     }
 }

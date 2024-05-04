@@ -18,7 +18,7 @@ public:
         return true;
     }
 
-     Class* getClass(const std::string& name) {
+    Class* getClass(const std::string& name) {
         auto it = classes.find(name);
         if (it != classes.end()) {
             return it->second;

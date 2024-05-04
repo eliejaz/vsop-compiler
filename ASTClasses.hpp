@@ -29,6 +29,7 @@ public:
     virtual ~ASTNode() {delete scope;}
     virtual std::string print() const = 0;
     void setPosition(const Position &position) { pos = position; }
+    void printScope(ProgramScope *parentScope);
     void printSemanticError(const std::string &message) const
     {
         std::ostringstream oss;
@@ -81,8 +82,9 @@ private:
     std::string customTypeName;
 
 public:
+    Class* typeClass;
+    llvm::Value* llvmValue;
     Type(TypeName typeName) : typeName(typeName) {}
-
     // Constructor for TYPEIDENTIFIER types.
     Type(std::string customTypeName) : typeName(TypeName::Custom), customTypeName(customTypeName) {}
     TypeName getType() { return typeName; }
@@ -189,6 +191,8 @@ public:
         return tryAddTypeToPrint(oss.str());
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class While : public Expression
@@ -213,6 +217,8 @@ public:
     }
 
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class Let : public Expression
@@ -248,6 +254,8 @@ public:
     Type *getLetType() { return letType; }
     std::string getName() { return name; }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class UnaryOp : public Expression
@@ -289,6 +297,8 @@ public:
         return tryAddTypeToPrint("UnOp(" + opToString() + ", " + expr->print() + ")");
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class BinaryOp : public Expression
@@ -354,6 +364,8 @@ public:
         return tryAddTypeToPrint("BinOp(" + opToString() + ", " + left->print() + ", " + right->print() + ")");
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class Assign : public Expression
@@ -377,6 +389,8 @@ public:
     }
     std::string getName() { return name; }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class New : public Expression
@@ -393,6 +407,8 @@ public:
     }
 
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class ObjectId : public Expression
@@ -409,6 +425,8 @@ public:
     }
     std::string getId(){return id;}
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class Call : public Expression
@@ -436,6 +454,8 @@ public:
         return tryAddTypeToPrint("Call(" + caller->print() + ", " + methodName + ", " + joinASTNodes(args) + ")");
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
+    llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class IntegerLiteral : public Literal
@@ -452,6 +472,7 @@ public:
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
     llvm::Value* codegen(CodeGenerator& generator) override;
+
 };
 
 class StringLiteral : public Literal
@@ -599,7 +620,8 @@ public:
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 
-   llvm::Value* codegen(CodeGenerator& generator);
+    llvm::Value* createFunctionType(CodeGenerator& generator);
+    llvm::Value* codegen(CodeGenerator& generator);
 };
 
 class Class : public ASTNode
@@ -609,6 +631,7 @@ private:
     std::string parent;
     std::vector<Field *> fields;
     std::vector<Method *> methods;
+
     Class* parentClass;
 
 private:
@@ -618,6 +641,8 @@ private:
     bool checkClassFieldsSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope);
 
 public:
+    std::vector<Field *> allFields;
+    std::vector<Method*> allMethods;
     Class(const std::string &name,
           std::vector<Field *> fields,
           std::vector<Method *> methods,
@@ -666,8 +691,9 @@ public:
 
     void collectMethods(std::vector<Method*>& allMethods);
     void collectParentFields(std::vector<Field *>& allFields);
-    void codegen(CodeGenerator& generator);
     llvm::Function* createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className);
+    void codegen(CodeGenerator& generator);
+
 };
 
 class Program : public ASTNode

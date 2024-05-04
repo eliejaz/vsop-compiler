@@ -1,7 +1,7 @@
 #include "ASTClasses.hpp"
 
 /* Other */
-void printScope(ProgramScope *parentScope)
+void ASTNode::printScope(ProgramScope *parentScope)
 {
     ProgramScope *currentScope = parentScope;
     int level = 0;
@@ -355,8 +355,12 @@ bool New::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSco
         printSemanticError(oss.str());
         noError = false;
     }
+    
     type = new Type(Type::TypeName::Custom);
     type->SetTypeCustom(typeName);
+    Class* ct = classSymbols->getClass(type->getStringTypeName());
+
+    type->typeClass = ct;
     scope = parentScope;
 
     return noError;
@@ -584,7 +588,7 @@ bool Method::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
         oss << "Type mismatch in Method : '" << name << "' return type is : '" << body->type->getStringTypeName() << "', expected : " << returnType->getStringTypeName();
         printSemanticError(oss.str());
     }
-    scope = parentScope;
+    scope = methodScope;
     return noError;
 }
 
@@ -749,6 +753,7 @@ bool Class::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
 
     Type *currentType = new Type(Type::TypeName::Custom);
     currentType->SetTypeCustom(name);
+    currentType->typeClass = this;
     scope->addSymbol("self", currentType);
 
     for (auto *method : methods)
