@@ -64,18 +64,13 @@ llvm::Value* Method::codegen(CodeGenerator& generator) {
     }
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType->typeToLLVM(generator), paramTypes, false);
 
-    llvm::Function* function = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "_" + name, generator.module);
+    llvm::Function* function = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "__" + name, generator.module);
 
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(generator.context, "entry", function);
     generator.builder.SetInsertPoint(entry);
 
-    // if (body) {
     llvm::Value* returnValue = body->codegen(generator);
     generator.builder.CreateRet(returnValue);
-    // }
-
-    //generator.builder.CreateRetVoid();
-
 
     return function;
 }
@@ -114,7 +109,7 @@ void Class::codegen(CodeGenerator& generator) {
     std::vector<Field *> allFields;
     collectParentFields(allFields);
 
-    std::string vtableName = "_Vtable" + name;
+    std::string vtableName = name + "VTable";
     llvm::StructType* vtableType = llvm::StructType::create(generator.context, vtableName);
     classFieldTypes.push_back(vtableType->getPointerTo());
 
@@ -139,14 +134,15 @@ void Class::codegen(CodeGenerator& generator) {
     for (auto& method : allMethods) {
         std::string callerName = method->caller->getName();
 
-        llvm::Function* methodFunc = generator.module->getFunction(llvm::StringRef(callerName+ "_" + method->getName()));
+        llvm::Function* methodFunc = generator.module->getFunction(llvm::StringRef(callerName+ "__" + method->getName()));
         vtableMethods.push_back(methodFunc);
         methodTypes.push_back(methodFunc->getType());
     }
 
     vtableType->setBody(methodTypes);
-    generator.module->getOrInsertGlobal(vtableName, vtableType);
-    llvm::GlobalVariable *vTable = generator.module->getNamedGlobal(vtableName);
+    std::string globalVtableName = name + "___vtable";
+    generator.module->getOrInsertGlobal(globalVtableName, vtableType);
+    llvm::GlobalVariable *vTable = generator.module->getNamedGlobal(globalVtableName);
     vTable->setInitializer(llvm::ConstantStruct::get(vtableType, vtableMethods));
 
     createClassNewFunction(generator, classType, vTable, name);
@@ -155,7 +151,7 @@ void Class::codegen(CodeGenerator& generator) {
 llvm::Function* Class::createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className) {
 
     llvm::FunctionType* funcType = llvm::FunctionType::get(classType->getPointerTo(), false);
-    llvm::Function* func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, className + "_new", generator.module);
+    llvm::Function* func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, className + "___new", generator.module);
 
     // Function entry block
     llvm::BasicBlock* block = llvm::BasicBlock::Create(generator.context, "entry", func);
@@ -191,11 +187,11 @@ void Program::codegen(CodeGenerator& generator)
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(generator.context, "entry", mainFunc);
     generator.builder.SetInsertPoint(entry);
 
-    llvm::Function* mainNew = generator.module->getFunction("Main_new");
+    llvm::Function* mainNew = generator.module->getFunction("Main___new");
     llvm::Value* mainInstance = generator.builder.CreateCall(mainNew, {}, "mainInstance");
 
     // Call the main() method 
-    llvm::Function* mainMethod = generator.module->getFunction("Main_main");
+    llvm::Function* mainMethod = generator.module->getFunction("Main__main");
     generator.builder.CreateCall(mainMethod, {mainInstance});
 
     llvm::StructType* objectType = llvm::StructType::getTypeByName(generator.context, "Object");
@@ -203,7 +199,7 @@ void Program::codegen(CodeGenerator& generator)
 
 
      llvm::Value* str = generator.builder.CreateGlobalStringPtr("Done printing using object.\n", "doneString");
-     llvm::Function* objectPrint = generator.module->getFunction("Object_print");
+     llvm::Function* objectPrint = generator.module->getFunction("Object__print");
     generator.builder.CreateCall(objectPrint, {objectInstance, str});
 
     // llvm::FunctionCallee printfFunc = generator.module->getOrInsertFunction("printf", llvm::FunctionType::get(llvm::Type::getInt32Ty(generator.context), llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(generator.context)), true));

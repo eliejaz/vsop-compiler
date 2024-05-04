@@ -12,7 +12,7 @@
 #include <iostream>
 
 const std::string initialCode = R"(
-%_IO_FILE = type opaque
+  %_IO_FILE = type opaque
 
 @stdin = external global %_IO_FILE*
 @stderr = external global %_IO_FILE*
@@ -50,16 +50,16 @@ declare i32 @ungetc(i32, %_IO_FILE*)
 
 ; Object's shared vtable instance
 
-@Object__vtable = constant %ObjectVTable { %Object* (%Object*, i8*)* @Object_print, %Object* (%Object*, i1)* @Object_printBool, %Object* (%Object*, i32)* @Object_printInt32, i8* (%Object*)* @Object_inputLine, i1 (%Object*)* @Object_inputBool, i32 (%Object*)* @Object_inputInt32 }
+@Object___vtable = constant %ObjectVTable { %Object* (%Object*, i8*)* @Object__print, %Object* (%Object*, i1)* @Object__printBool, %Object* (%Object*, i32)* @Object__printInt32, i8* (%Object*)* @Object__inputLine, i1 (%Object*)* @Object__inputBool, i32 (%Object*)* @Object__inputInt32 }
 
 ; Object's methods
 
-define %Object* @Object_print(%Object*, i8*) {
+define %Object* @Object__print(%Object*, i8*) {
   %3 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str, i64 0, i64 0), i8* %1)
   ret %Object* %0
 }
 
-define %Object* @Object_printBool(%Object*, i1 zeroext) {
+define %Object* @Object__printBool(%Object*, i1 zeroext) {
   %3 = zext i1 %1 to i8
   %4 = trunc i8 %3 to i1
   %5 = zext i1 %4 to i64
@@ -68,12 +68,12 @@ define %Object* @Object_printBool(%Object*, i1 zeroext) {
   ret %Object* %0
 }
 
-define %Object* @Object_printInt32(%Object*, i32) {
+define %Object* @Object__printInt32(%Object*, i32) {
   %3 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str.3, i64 0, i64 0), i32 %1)
   ret %Object* %0
 }
 
-define i8* @Object_inputLine(%Object*) {
+define i8* @Object__inputLine(%Object*) {
   %2 = call i8* @read_until(i32 (i32)* @is_eol)
   %3 = icmp ne i8* %2, null
   br i1 %3, label %5, label %4
@@ -86,7 +86,7 @@ define i8* @Object_inputLine(%Object*) {
   ret i8* %.0
 }
 
-define zeroext i1 @Object_inputBool(%Object*) {
+define zeroext i1 @Object__inputBool(%Object*) {
   call void @skip_while(i32 (i32)* @isspace)
   %2 = call i8* @read_until(i32 (i32)* @isspace)
   %3 = icmp ne i8* %2, null
@@ -137,7 +137,7 @@ define zeroext i1 @Object_inputBool(%Object*) {
   ret i1 %.0
 }
 
-define i32 @Object_inputInt32(%Object*) {
+define i32 @Object__inputInt32(%Object*) {
   %2 = alloca i8*
   call void @skip_while(i32 (i32)* @isspace)
   %3 = call i8* @read_until(i32 (i32)* @isspace)
@@ -254,20 +254,20 @@ define i32 @Object_inputInt32(%Object*) {
 
 ; Object constructor and initializer
 
-define %Object* @Object__new() {
+define %Object* @Object___new() {
   %1 = call i8* @malloc(i64 8)
   %2 = bitcast i8* %1 to %Object*
-  %3 = call %Object* @Object__init(%Object* %2)
+  %3 = call %Object* @Object___init(%Object* %2)
   ret %Object* %3
 }
 
-define %Object* @Object__init(%Object*) {
+define %Object* @Object___init(%Object*) {
   %2 = icmp ne %Object* %0, null
   br i1 %2, label %3, label %5
 
 3:                                                ; preds = %1
   %4 = getelementptr inbounds %Object, %Object* %0, i32 0, i32 0
-  store %ObjectVTable* @Object__vtable, %ObjectVTable** %4
+  store %ObjectVTable* @Object___vtable, %ObjectVTable** %4
   br label %5
 
 5:                                                ; preds = %3, %1
@@ -382,7 +382,8 @@ define internal void @skip_while(i32 (i32)*) {
 
 19:                                               ; preds = %16, %14
   ret void
-})";
+}
+)";
 
 class CodeGenerator {
 public:
