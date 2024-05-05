@@ -246,6 +246,8 @@ llvm::Value* Method::createFunctionType(CodeGenerator& generator){
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType->typeToLLVM(generator), paramTypes, false);
 
     llvm::Function* function = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "__" + name, generator.module);
+    return nullptr;
+}
 
 llvm::Value* Method::codegen(CodeGenerator& generator) {
 
