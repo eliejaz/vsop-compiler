@@ -7,6 +7,7 @@ void ASTNode::printScope(ProgramScope *parentScope)
     int level = 0;
     while (currentScope != nullptr)
     {
+        std::cout << currentScope->scopeLevelName <<std::endl;
         for (const auto &pair : currentScope->symbolToTypeMap)
         {
             std::cout << "  " << pair.first << " : " << pair.second->getStringTypeName() << std::endl;

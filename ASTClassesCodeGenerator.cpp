@@ -110,15 +110,25 @@ llvm::Value* BinaryOp::codegen(CodeGenerator& generator) {
         case Op::And:
             type->llvmValue = generator.builder.CreateAnd(L, R, "andtmp");
             break;
+      case Op::Power:
+            type->llvmValue = nullptr;
+            break;
     }
     return type->llvmValue;
 }
 
 llvm::Value* Assign::codegen(CodeGenerator& generator) {
-    // llvm::Value* var = generator.scope->getVariable(name);
-    // llvm::Value* exprVal = expr->codegen(generator);
-    // return generator.builder.CreateStore(exprVal, var);
-    return nullptr;
+    printScope(scope);
+    Type* currentType = scope->lookup(name);
+    llvm::Value* var = currentType->llvmValue;
+    var->dump();
+    
+    llvm::Value* exprVal = expr->codegen(generator);
+    exprVal->dump();
+    
+    currentType->llvmValue = generator.builder.CreateStore(exprVal, var);
+ 
+    return currentType->llvmValue;
 }
 
 llvm::Value* New::codegen(CodeGenerator& generator) {
@@ -245,8 +255,7 @@ llvm::Value* Method::createFunctionType(CodeGenerator& generator){
     }
     llvm::FunctionType* funcType = llvm::FunctionType::get(returnType->typeToLLVM(generator), paramTypes, false);
 
-    llvm::Function* function = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "__" + name, generator.module);
-    return nullptr;
+    return llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "__" + name, generator.module);
 }
 
 llvm::Value* Method::codegen(CodeGenerator& generator) {
