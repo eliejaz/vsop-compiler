@@ -108,16 +108,19 @@ llvm::Value *Let::codegen(CodeGenerator &generator)
     llvm::IRBuilder<> TmpBuilder(&(parentFunction->getEntryBlock()),
                                  parentFunction->getEntryBlock().begin());
     llvm::AllocaInst *alloca = TmpBuilder.CreateAlloca(letType->typeToLLVM(generator), nullptr, llvm::Twine(name));
+    std::cout<<"ok0"<<std::endl;
     letType->llvmValue = alloca;
 
     if (initExpr)
     {
         llvm::Value *initVal = initExpr->codegen(generator);
-        letType->llvmValue = initVal;
-        generator.builder.CreateStore(initVal, alloca);
+        letType->llvmValue = generator.builder.CreateBitCast(initVal, letType->typeToLLVM(generator), "letCast");
+        generator.builder.CreateStore(letType->llvmValue , alloca);
     }
+    std::cout<<"ok1"<<std::endl;
 
     llvm::Value *scopeVal = scopeExpr->codegen(generator);
+    scopeVal->dump();
 
     type->llvmValue = generator.builder.CreateBitCast(scopeVal, type->typeToLLVM(generator), "letCast");
 
@@ -242,8 +245,12 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
 {
 
     llvm::Value *thisObj = caller->codegen(generator);
+    std::cout<<"OK1"<<std::endl;
+    thisObj->dump();
+    std::cout<<"OK1"<< caller->type->getStringTypeName()<<std::endl;
 
-    Class *callerClass = caller->type->typeClass;
+    Class *callerClass =caller->type->typeClass;
+    std::cout<<"OK1"<< callerClass->getName()<<std::endl;
 
     std::string finalMethodName = "";
     int methodIndex = 0;
@@ -257,6 +264,7 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
             break;
         }
     }
+    std::cout<<"OK2"<<std::endl;
 
     llvm::Value *vTablePtr = generator.builder.CreateStructGEP(thisObj->getType()->getPointerElementType(), thisObj, 0);
     llvm::Value *vTableValue = generator.builder.CreateLoad(vTablePtr->getType()->getPointerElementType(), vTablePtr, "vTableValue");
@@ -310,6 +318,7 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
     }
     else{
         type->llvmValue = objectIdType->llvmValue;
+        type->llvmValue->dump();
 
     }
     return objectIdType->llvmValue;

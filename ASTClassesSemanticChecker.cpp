@@ -345,7 +345,7 @@ bool Assign::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
         while (currentScope != nullptr) {
             auto it = currentScope->symbolToTypeMap.find(name);
             if (it != currentScope->symbolToTypeMap.end()) {
-                if(!it->second->isCompatibleWith(type, classSymbols)){
+                if(!type->isCompatibleWith(it->second, classSymbols)){
                     std::ostringstream oss;
                     oss << "This literal hast type: " << type->getStringTypeName() << " expected type: " << it->second->getStringTypeName()  << ".";
                     printSemanticError(oss.str());
@@ -588,6 +588,9 @@ bool Method::checkFormalSemantics(ClassSymbolTable *classSymbols, ProgramScope *
                 << "' in method '" << name << "' .";
             printSemanticError(oss.str());
             noError = false;
+        }
+        if(formal->getType()->typeName == Type::TypeName::Custom){
+            formal->getType()->typeClass = classSymbols->getClass(formal->getType()->getStringTypeName());
         }
         noError &= formal->checkSemantics(classSymbols, parentScope);
     }
