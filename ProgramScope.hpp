@@ -5,6 +5,7 @@
 #include "ASTClasses.hpp"
 
 class Type;
+class ASTNode;
 
 class ProgramScope {
 
@@ -13,6 +14,7 @@ public:
     std::map<std::string, Type*> symbolToTypeMap;
     ProgramScope* parentScope;
     std:: string scopeLevelName;
+    ASTNode* scopeNode;
 
     ProgramScope(ProgramScope* parent = nullptr, std:: string scopeLevelName = "class"): parentScope(parent), scopeLevelName(scopeLevelName)  {}
 
@@ -46,6 +48,18 @@ public:
             auto it = currentScope->symbolToTypeMap.find(name);
             if (it != currentScope->symbolToTypeMap.end()) {
                 return currentScope->scopeLevelName;
+            }
+            currentScope = currentScope->parentScope;
+        }
+        return nullptr;
+    }
+
+    ASTNode* lookupScopeNode(const std::string& name) {
+        ProgramScope* currentScope = this;
+        while (currentScope != nullptr) {
+            auto it = currentScope->symbolToTypeMap.find(name);
+            if (it != currentScope->symbolToTypeMap.end()) {
+                return currentScope->scopeNode;
             }
             currentScope = currentScope->parentScope;
         }

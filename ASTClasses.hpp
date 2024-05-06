@@ -77,11 +77,9 @@ public:
         UNDEFINED
     };
 
-private:
+public:
     TypeName typeName;
     std::string customTypeName;
-
-public:
     Class* typeClass;
     llvm::Value* llvmValue;
     Type(TypeName typeName) : typeName(typeName) {}
@@ -551,6 +549,7 @@ public:
 
     Type *getType() { return type; }
     std::string getName() { return name; }
+    Expression * getInitExpr() { return initExpr; }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 };
 
@@ -689,6 +688,7 @@ public:
         return nullptr;
     }
 
+    llvm::Value* getDefaultFieldValue(CodeGenerator& generator, Type* fieldType);
     void collectMethods(std::vector<Method*>& allMethods);
     void collectParentFields(std::vector<Field *>& allFields);
     llvm::Function* createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className);

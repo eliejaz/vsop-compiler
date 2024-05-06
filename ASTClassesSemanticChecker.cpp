@@ -61,6 +61,7 @@ bool Type::isCompatibleWith(const Type *other, ClassSymbolTable *classSymbols) c
 bool Block::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentScope)
 {
     ProgramScope *blockScope = new ProgramScope(parentScope, "block");
+    blockScope->scopeNode = this;
     bool noError = true;
     for (auto *exp : expressions)
     {
@@ -148,6 +149,7 @@ bool Let::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSco
 {
     bool noError = true;
     ProgramScope *letScope = new ProgramScope(parentScope, "let");
+    letScope->scopeNode = this;
     letScope->addSymbol(name, letType);
 
     if (letType->getType() == Type::TypeName::Custom && !classSymbols->hasClass(letType->getStringTypeName()))
@@ -329,7 +331,8 @@ bool Assign::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
 {
     bool noError = true;
     noError &= expr->checkSemantics(classSymbols, parentScope);
-    if (!parentScope->lookup(name))
+    Type* parentType = parentScope->lookup(name);
+    if (!parentType)
     {
         std::ostringstream oss;
         oss << "use of unbound variable " << name << ".";
@@ -337,7 +340,26 @@ bool Assign::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
         noError = false;
     }
     type = expr->type;
-    parentScope->addSymbol(name, type);
+
+    ProgramScope* currentScope = parentScope;
+        while (currentScope != nullptr) {
+            auto it = currentScope->symbolToTypeMap.find(name);
+            if (it != currentScope->symbolToTypeMap.end()) {
+                if(!it->second->isCompatibleWith(type, classSymbols)){
+                    std::ostringstream oss;
+                    oss << "This literal hast type: " << type->getStringTypeName() << " expected type: " << it->second->getStringTypeName()  << ".";
+                    printSemanticError(oss.str());
+                    noError = false;
+                }
+                if(type->typeName == Type::TypeName::Custom){
+                    it->second->customTypeName = type->customTypeName;
+                    it->second->typeClass = type->typeClass;
+                }
+                type = it->second;
+                break;
+            }
+            currentScope = currentScope->parentScope;
+        }
 
     scope = parentScope;
 
@@ -577,6 +599,7 @@ bool Method::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
     bool noError = true;
     // Create a new scope for this method
     ProgramScope *methodScope = new ProgramScope(parentScope, "method");
+    methodScope->scopeNode = this;
 
     noError &= checkMethodTypeDefinitions(classSymbols);
     noError &= checkFormalSemantics(classSymbols, methodScope);
@@ -731,6 +754,7 @@ bool Class::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
     noError &= checkMethodSignatures(classSymbols);
 
     scope = new ProgramScope(parentScope, "class");
+    scope->scopeNode = this;
 
     // If the class has a parent, we need to inherit the scope from the parent
     if (parent != "Object")
@@ -782,6 +806,7 @@ Class *Program::createObjectClass() const
     for (auto *method : objectClass->getMethods())
     {method->caller = objectClass;
     }
+    objectType->typeClass = objectClass;
     objectClass->allMethods = methods;
     return objectClass;
 }
