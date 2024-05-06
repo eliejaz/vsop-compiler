@@ -9,25 +9,34 @@ llvm::Value* If::codegen(CodeGenerator& generator) {
     llvm::Value* condValue = condition->codegen(generator);
     generator.builder.CreateCondBr(condValue, thenBlock, elseBlock);
 
+    llvm::Type* ifType = type->typeToLLVM(generator);
+
     // Then block
     generator.builder.SetInsertPoint(thenBlock);
     llvm::Value* thenValue = thenBranch->codegen(generator);
-    generator.builder.CreateBr(mergeBlock);
+    thenValue = generator.builder.CreateBitCast(thenValue, ifType, "thenCast");
     thenBlock = generator.builder.GetInsertBlock();
+    generator.builder.CreateBr(mergeBlock);
+
 
     // Else block
     function->getBasicBlockList().push_back(elseBlock);
     generator.builder.SetInsertPoint(elseBlock);
     llvm::Value* elseValue = elseBranch ? elseBranch->codegen(generator) : nullptr;
-    generator.builder.CreateBr(mergeBlock);
+    if (elseValue) {
+        elseValue = generator.builder.CreateBitCast(elseValue, ifType, "elseCast");
+    }
     elseBlock = generator.builder.GetInsertBlock();
+    generator.builder.CreateBr(mergeBlock);
+
 
     // Merge block
     function->getBasicBlockList().push_back(mergeBlock);
     generator.builder.SetInsertPoint(mergeBlock);
-    llvm::PHINode* phiNode = generator.builder.CreatePHI(llvm::Type::getInt32Ty(generator.context), 2, "iftmp");
 
+    llvm::PHINode* phiNode = generator.builder.CreatePHI(ifType, 2, "iftmp");
     phiNode->addIncoming(thenValue, thenBlock);
+
     if (elseValue) {
         phiNode->addIncoming(elseValue, elseBlock);
     }
@@ -36,6 +45,7 @@ llvm::Value* If::codegen(CodeGenerator& generator) {
 
     return phiNode;
 }
+
 
 llvm::Value* While::codegen(CodeGenerator& generator) {
     llvm::Function* function = generator.builder.GetInsertBlock()->getParent();
@@ -121,10 +131,8 @@ llvm::Value* Assign::codegen(CodeGenerator& generator) {
     printScope(scope);
     Type* currentType = scope->lookup(name);
     llvm::Value* var = currentType->llvmValue;
-    var->dump();
     
     llvm::Value* exprVal = expr->codegen(generator);
-    exprVal->dump();
     
     currentType->llvmValue = generator.builder.CreateStore(exprVal, var);
  
@@ -133,16 +141,20 @@ llvm::Value* Assign::codegen(CodeGenerator& generator) {
 
 llvm::Value* New::codegen(CodeGenerator& generator) {
     std::string callerName = type->getStringTypeName();
-    llvm::Function* mainNew = generator.module->getFunction(callerName + "___new");
-    type->llvmValue = generator.builder.CreateCall(mainNew, {}, callerName + "Instance");
+    llvm::Function* newFunc = generator.module->getFunction(callerName + "___new");
+
+    type->llvmValue = generator.builder.CreateCall(newFunc, {}, callerName + "Instance");
     return type->llvmValue;
 
 }
 
 
 llvm::Value* Call::codegen(CodeGenerator& generator) {
-    llvm::Value* thisObj = caller->codegen(generator);
     Class* callerClass = caller->type->typeClass;
+
+
+    llvm::Value* thisObj = caller->codegen(generator);
+
 
     std::string finalMethodName = ""; 
     int methodIndex = 0;
@@ -156,10 +168,9 @@ llvm::Value* Call::codegen(CodeGenerator& generator) {
         }
     }
 
-    llvm::Value* vTablePtr = generator.builder.CreateStructGEP(thisObj->getType()->getPointerElementType(), thisObj, 0);
 
+    llvm::Value* vTablePtr = generator.builder.CreateStructGEP(thisObj->getType()->getPointerElementType(), thisObj, 0);
     llvm::Value* vTableValue = generator.builder.CreateLoad(vTablePtr->getType()->getPointerElementType(),vTablePtr, "vTableValue");
-    
     llvm::Value* funcPtrVal = generator.builder.CreateStructGEP(vTableValue->getType()->getPointerElementType(), vTableValue, methodIndex, "methodValue");
 
 
@@ -178,6 +189,7 @@ llvm::Value* Call::codegen(CodeGenerator& generator) {
         llvm::Value* castedArgVal = generator.builder.CreateBitCast(argVal, paramType, "arg" + std::to_string(i));
         argVals.push_back(castedArgVal);
     }
+
 
     // Create the call instruction
     llvm::Value* result = generator.builder.CreateCall(calleeFuncType, calleeMethod, argVals, "callResult");
@@ -199,7 +211,7 @@ llvm::Type *Type::typeToLLVM(CodeGenerator &generator)
     case TypeName::Unit:
         return llvm::Type::getVoidTy(generator.context);
     case TypeName::Custom:
-        return generator.handleCustomType(customTypeName);
+        return generator.handleCustomType(customTypeName)->getPointerTo();
     default:
         return llvm::Type::getVoidTy(generator.context);
     }
@@ -227,10 +239,38 @@ llvm::Value *IntegerLiteral::codegen(CodeGenerator &generator)
 }
 
 /* StringLiteral */
-llvm::Value *StringLiteral::codegen(CodeGenerator &generator)
-{
-    return generator.builder.CreateGlobalStringPtr(value, "globalString");
+llvm::Value* StringLiteral::codegen(CodeGenerator &generator) {
+    std::string processedString = value.substr(1, value.size() - 2);
+    std::string resultString;
+
+    for (size_t i = 0; i < processedString.size(); ++i) {
+        if (processedString[i] == '\\') {
+            ++i;
+            switch (processedString[i]) {
+                case 'x': {
+                    if (i + 2 < processedString.size() && std::isxdigit(processedString[i + 1]) && std::isxdigit(processedString[i + 2])) {
+                        std::string hexStr = processedString.substr(i + 1, 2);
+                        char ch = static_cast<char>(std::stoi(hexStr, nullptr, 16));
+                        resultString += ch;
+                        i += 2;
+                    } else {
+                        resultString += "\\x";
+                    }
+                    break;
+                }
+                default:
+                    resultString += '\\';
+                    resultString += processedString[i];
+            }
+        } else {
+            resultString += processedString[i];
+        }
+    }
+
+    return generator.builder.CreateGlobalStringPtr(resultString, "globalString");
 }
+
+
 
 /* BooleanLiteral */
 llvm::Value *BooleanLiteral::codegen(CodeGenerator &generator)
@@ -246,7 +286,7 @@ llvm::Value *UnitLiteral::codegen(CodeGenerator &generator)
 
 /* Method */
 llvm::Value* Method::createFunctionType(CodeGenerator& generator){
-    llvm::StructType* classType = llvm::StructType::getTypeByName(generator.context, caller->getName());
+    llvm::StructType* classType = generator.handleCustomType(caller->getName());
     std::vector<llvm::Type*> paramTypes;
     paramTypes.push_back(classType->getPointerTo());
     for (auto& formal : formals) {
@@ -317,7 +357,9 @@ void Class::codegen(CodeGenerator& generator) {
     allFields = collectAllFields;
 
     std::string vtableName = name + "VTable";
-    llvm::StructType* vtableType = llvm::StructType::create(generator.context, vtableName);
+
+    llvm::StructType* vtableType = generator.handleCustomType(vtableName);
+
     classFieldTypes.push_back(vtableType->getPointerTo());
 
     // Add types for each field in the current class
@@ -327,7 +369,8 @@ void Class::codegen(CodeGenerator& generator) {
     }
 
     // Define the class type with fields
-    llvm::StructType* classType = llvm::StructType::create(generator.context, name);
+
+    llvm::StructType* classType = generator.handleCustomType(name);
     classType->setBody(classFieldTypes);
 
     for (auto& method : methods) {

@@ -1,32 +1,15 @@
-class Animal {
-    animalField : int32;
-    isNil() : bool { true }
-    length() : int32 { 0 }
+class Parent {
+    name() : string { "Parent" }
 }
-
-class Cat extends Animal {
-    catField : int32;
-    testCat(a : int32) : int32 {
-        0
-    }
-    isNil() : bool { false }
+class Child extends Parent {
+    name() : string { "Child" }
 }
-
 class Main {
-    test(a : int32) : int32{
-         a + 3
-    }
-    testIf(a : bool) : int32{
-        if a then
-            1
-        else
-            4
-    }
-
     main() : int32 {
-        printInt32(testIf(true));
-        print("HELLO WORLD!");
-
+        print((if true then new Parent else new Child).name());
+        print("\n");
+        print((if false then new Parent else new Child).name());
+        print("\n");
         0
     }
 }

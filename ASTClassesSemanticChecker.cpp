@@ -782,6 +782,7 @@ Class *Program::createObjectClass() const
     for (auto *method : objectClass->getMethods())
     {method->caller = objectClass;
     }
+    objectClass->allMethods = methods;
     return objectClass;
 }
 

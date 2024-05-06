@@ -8,11 +8,14 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/MemoryBuffer.h>
+#include <unordered_map>
 
 #include <iostream>
 
 const std::string initialCode = R"(
-  %_IO_FILE = type opaque
+target triple = "x86_64-pc-linux-gnu"
+
+%_IO_FILE = type opaque
 
 @stdin = external global %_IO_FILE*
 @stderr = external global %_IO_FILE*
@@ -390,6 +393,8 @@ public:
     llvm::LLVMContext context;
     llvm::Module* module;
     llvm::IRBuilder<> builder;
+    std::unordered_map<std::string, llvm::StructType*> customTypes;
+
 
     CodeGenerator(const std::string& fileName)
         : builder(context) {
@@ -404,13 +409,26 @@ public:
         }
         else {
             module->setModuleIdentifier(fileName);
+            module->setTargetTriple("x86_64-pc-linux-gnu"); 
         }
     }
 
-    llvm::Type* handleCustomType(const std::string& name) {
-        llvm::StructType* structType = llvm::StructType::getTypeByName(context, name);
-        if (structType) return structType;
-        return llvm::StructType::create(context, name);
+    llvm::StructType* handleCustomType(const std::string& name) {
+      
+        auto it = customTypes.find(name);
+        if (it != customTypes.end()) {
+            return it->second;
+        } else {
+            for (llvm::StructType* type : module->getIdentifiedStructTypes()) {
+              if (type->getName().str() == name) {
+                  customTypes[name] = type;
+                  return type;
+              }
+            }
+            llvm::StructType* structType = llvm::StructType::create(context, name);
+            customTypes[name] = structType;
+            return structType;
+        }
     }
 
     void printLLVMCode(){
