@@ -8,6 +8,13 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/MemoryBuffer.h>
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Utils.h"
+
+
 #include <unordered_map>
 
 #include <iostream>
@@ -445,6 +452,25 @@ public:
         module->print(dest, nullptr);
         dest.flush();  
     }
+
+    void applyOptimizations() {
+      // Create a function pass manager for this module
+      llvm::legacy::FunctionPassManager fpm(module);
+
+      // Add specific optimizations
+      fpm.add(llvm::createPromoteMemoryToRegisterPass()); // Promote memory to register
+      fpm.add(llvm::createReassociatePass());             // Reassociate expressions
+      fpm.add(llvm::createGVNPass());                     // Eliminate common subexpressions
+      fpm.add(llvm::createCFGSimplificationPass());       // Simplify the CFG
+
+      // Do function-level optimizations
+      fpm.doInitialization();
+      for (auto &function : *module) {
+          fpm.run(function);
+      }
+      fpm.doFinalization();
+  }
+
 
 };
 

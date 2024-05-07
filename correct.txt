@@ -1,15 +1,14 @@
-class Parent {
-    name() : string { "Parent" }
-}
-class Child extends Parent {
-    name() : string { "Child" }
-}
 class Main {
     main() : int32 {
-        print((if true then new Parent else new Child).name());
-        print("\n");
-        print((if false then new Parent else new Child).name());
-        print("\n");
+        if { print("OK\n"); true } and { print("OK\n"); true } then
+            print("OK\n")
+        else print("KO\n");
+        if { print("OK\n"); true } and { print("OK\n"); false } then
+            print("KO\n")
+        else print("OK\n");
+        if { print("OK\n"); false } and { print("KO\n"); true } then
+            print("KO\n")
+        else print("OK\n");
         0
     }
 }

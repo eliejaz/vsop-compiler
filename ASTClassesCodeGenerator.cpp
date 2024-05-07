@@ -108,7 +108,6 @@ llvm::Value *Let::codegen(CodeGenerator &generator)
     llvm::IRBuilder<> TmpBuilder(&(parentFunction->getEntryBlock()),
                                  parentFunction->getEntryBlock().begin());
     llvm::AllocaInst *alloca = TmpBuilder.CreateAlloca(letType->typeToLLVM(generator), nullptr, llvm::Twine(name));
-    std::cout<<"ok0"<<std::endl;
     letType->llvmValue = alloca;
 
     if (initExpr)
@@ -117,10 +116,8 @@ llvm::Value *Let::codegen(CodeGenerator &generator)
         letType->llvmValue = generator.builder.CreateBitCast(initVal, letType->typeToLLVM(generator), "letCast");
         generator.builder.CreateStore(letType->llvmValue , alloca);
     }
-    std::cout<<"ok1"<<std::endl;
 
     llvm::Value *scopeVal = scopeExpr->codegen(generator);
-    scopeVal->dump();
 
     type->llvmValue = generator.builder.CreateBitCast(scopeVal, type->typeToLLVM(generator), "letCast");
 
@@ -149,12 +146,13 @@ llvm::Value *UnaryOp::codegen(CodeGenerator &generator)
 }
 
 /* BinaryOp */
-llvm::Value *BinaryOp::codegen(CodeGenerator &generator)
-{
+llvm::Value *BinaryOp::codegen(CodeGenerator &generator) {
     llvm::Value *L = left->codegen(generator);
-    llvm::Value *R = right->codegen(generator);
-    switch (op)
-    {
+    llvm::Value *R = nullptr;
+    if(op!= Op::And)
+       R = right->codegen(generator);
+
+    switch (op) {
     case Op::Add:
         type->llvmValue = generator.builder.CreateAdd(L, R, "addtmp");
         break;
@@ -177,14 +175,38 @@ llvm::Value *BinaryOp::codegen(CodeGenerator &generator)
         type->llvmValue = generator.builder.CreateICmpSLE(L, R, "letmp");
         break;
     case Op::And:
-        type->llvmValue = generator.builder.CreateAnd(L, R, "andtmp");
-        break;
+        {
+            llvm::Function *function = generator.builder.GetInsertBlock()->getParent();
+
+            llvm::BasicBlock *afterLBlock = generator.builder.GetInsertBlock();
+
+            llvm::BasicBlock *evalRBlock = llvm::BasicBlock::Create(generator.context, "evalR", function);
+            llvm::BasicBlock *mergeBlock = llvm::BasicBlock::Create(generator.context, "mergeAnd", function);
+
+            // Conditional branch based on the result of L
+            generator.builder.CreateCondBr(L, evalRBlock, mergeBlock);
+
+            // Evaluate R only if L is true
+            generator.builder.SetInsertPoint(evalRBlock);
+            llvm::Value *R = right->codegen(generator);
+            generator.builder.CreateBr(mergeBlock);
+
+            generator.builder.SetInsertPoint(mergeBlock);
+            llvm::PHINode *phiNode = generator.builder.CreatePHI(llvm::Type::getInt1Ty(generator.context), 2, "andResult");
+            phiNode->addIncoming(R, evalRBlock);
+            phiNode->addIncoming(llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0)), afterLBlock);
+
+            type->llvmValue = phiNode;
+            break;
+        }
     case Op::Power:
         type->llvmValue = nullptr;
         break;
     }
+
     return type->llvmValue;
 }
+
 
 /* Assign */
 llvm::Value *Assign::codegen(CodeGenerator &generator)
@@ -245,12 +267,8 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
 {
 
     llvm::Value *thisObj = caller->codegen(generator);
-    std::cout<<"OK1"<<std::endl;
-    thisObj->dump();
-    std::cout<<"OK1"<< caller->type->getStringTypeName()<<std::endl;
 
     Class *callerClass =caller->type->typeClass;
-    std::cout<<"OK1"<< callerClass->getName()<<std::endl;
 
     std::string finalMethodName = "";
     int methodIndex = 0;
@@ -264,7 +282,6 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
             break;
         }
     }
-    std::cout<<"OK2"<<std::endl;
 
     llvm::Value *vTablePtr = generator.builder.CreateStructGEP(thisObj->getType()->getPointerElementType(), thisObj, 0);
     llvm::Value *vTableValue = generator.builder.CreateLoad(vTablePtr->getType()->getPointerElementType(), vTablePtr, "vTableValue");
@@ -318,7 +335,6 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
     }
     else{
         type->llvmValue = objectIdType->llvmValue;
-        type->llvmValue->dump();
 
     }
     return objectIdType->llvmValue;
@@ -578,11 +594,29 @@ llvm::Value *Class::getDefaultFieldValue(CodeGenerator &generator, Type *fieldTy
     case Type::TypeName::Bool:
         return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
     case Type::TypeName::String:
-        return llvm::ConstantPointerNull::get(static_cast<llvm::PointerType *>(llvm::Type::getInt8PtrTy(generator.context)));
+        {
+            // Create a constant empty string ""
+            llvm::Constant* strConstant = llvm::ConstantDataArray::getString(generator.context, "", true);
+            llvm::GlobalVariable* globalStr = new llvm::GlobalVariable(
+                *generator.module, 
+                strConstant->getType(), 
+                true, 
+                llvm::GlobalValue::PrivateLinkage, 
+                strConstant,
+                ".str.empty");
+
+            // Properly get the pointer to the first character of the string
+            llvm::ArrayType* arrayType = llvm::ArrayType::get(llvm::Type::getInt8Ty(generator.context), 1);
+            llvm::Constant* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(generator.context), 0);
+            std::vector<llvm::Constant*> indices = {zero, zero};  // index into the array
+            llvm::Constant* gep = llvm::ConstantExpr::getGetElementPtr(arrayType, globalStr, indices);
+
+            return gep;
+        }
     case Type::TypeName::Unit:
         return llvm::UndefValue::get(llvm::Type::getVoidTy(generator.context));
     case Type::TypeName::Custom:
-        return llvm::ConstantPointerNull::get(static_cast<llvm::PointerType *>(fieldType->typeToLLVM(generator)));
+        return llvm::ConstantPointerNull::get(static_cast<llvm::PointerType*>(fieldType->typeToLLVM(generator)));
     default:
         return llvm::UndefValue::get(llvm::Type::getVoidTy(generator.context));
     }
@@ -614,4 +648,6 @@ void Program::codegen(CodeGenerator &generator)
     generator.builder.CreateCall(mainMethod, {mainInstance});
 
     generator.builder.CreateRet(llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0, true)));
+
+    generator.applyOptimizations();
 }
