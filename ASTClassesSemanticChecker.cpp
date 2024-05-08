@@ -451,6 +451,7 @@ bool Call::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSc
             printSemanticError(oss.str());
             return false;
         }
+        
     }
 
     // Check if the method exists within the caller class or parent classes
@@ -484,7 +485,7 @@ bool Call::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSc
 
     // Set the type of the call expression to the return type of the method
     type = method->getReturnType();
-
+    type->typeClass = classSymbols->getClass(type->getStringTypeName());
     return noError;
 }
 
