@@ -73,7 +73,7 @@ llvm::Value *If::codegen(CodeGenerator &generator)
     // Then block
     generator.builder.SetInsertPoint(thenBlock);
     llvm::Value *thenValue = thenBranch->codegen(generator);
-    if(type->typeName == Type::TypeName::Custom)
+    if(thenBranch->type->typeName == Type::TypeName::Custom)
         thenValue = generator.builder.CreateBitCast(thenValue, ifType, "thenCast");
     thenBlock = generator.builder.GetInsertBlock();
     generator.builder.CreateBr(mergeBlock);
@@ -83,7 +83,7 @@ llvm::Value *If::codegen(CodeGenerator &generator)
     generator.builder.SetInsertPoint(elseBlock);
     llvm::Value *elseValue = elseBranch ? elseBranch->codegen(generator) : nullptr;
     if (elseValue)
-    {   if(type->typeName == Type::TypeName::Custom)
+    {   if(elseBranch->type->typeName == Type::TypeName::Custom)
             elseValue = generator.builder.CreateBitCast(elseValue, ifType, "elseCast");
     }
     elseBlock = generator.builder.GetInsertBlock();
@@ -213,7 +213,11 @@ llvm::Value *BinaryOp::codegen(CodeGenerator &generator) {
         type->llvmValue = generator.builder.CreateSDiv(L, R, "divtmp");
         break;
     case Op::Equal:
-        type->llvmValue = generator.builder.CreateICmpEQ(L, R, "eqtmp");
+        if (left->type->typeName == Type::TypeName::Unit || right->type->typeName == Type::TypeName::Unit) {
+            type->llvmValue = llvm::ConstantInt::get(generator.context, llvm::APInt(1, 1));
+        } else {
+            type->llvmValue = generator.builder.CreateICmpEQ(L, R, "eqtmp");
+        }
         break;
     case Op::LessThan:
         type->llvmValue = generator.builder.CreateICmpSLT(L, R, "lttmp");
@@ -391,7 +395,7 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
                 break;
             }
         }
-    }else if (lookUpName == "let" ||objectIdType->llvmValue->getType()->isPointerTy()){
+    }else if (lookUpName == "let" ||(objectIdType->llvmValue->getType()->isPointerTy()&&lookUpName != "method")){
         return generator.builder.CreateLoad(objectIdType->typeToLLVM(generator), objectIdType->llvmValue);
 
     }
