@@ -213,8 +213,6 @@ llvm::Value *BinaryOp::codegen(CodeGenerator &generator) {
         type->llvmValue = generator.builder.CreateSDiv(L, R, "divtmp");
         break;
     case Op::Equal:
-        L->dump();
-        R->dump();
         type->llvmValue = generator.builder.CreateICmpEQ(L, R, "eqtmp");
         break;
     case Op::LessThan:
@@ -394,7 +392,6 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
             }
         }
     }else if (lookUpName == "let" ||objectIdType->llvmValue->getType()->isPointerTy()){
-        generator.builder.CreateLoad(objectIdType->typeToLLVM(generator), objectIdType->llvmValue)->dump();
         return generator.builder.CreateLoad(objectIdType->typeToLLVM(generator), objectIdType->llvmValue);
 
     }
