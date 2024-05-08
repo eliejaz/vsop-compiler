@@ -85,6 +85,7 @@ public:
     Type(TypeName typeName) : typeName(typeName) {}
     // Constructor for TYPEIDENTIFIER types.
     Type(std::string customTypeName) : typeName(TypeName::Custom), customTypeName(customTypeName) {}
+    virtual ~Type() {}
     TypeName getType() { return typeName; }
     void SetTypeCustom(std::string name) { customTypeName = name; }
     std::string getStringTypeName() const
@@ -115,7 +116,7 @@ class Expression : public ASTNode
 {
 public:
     Type *type = new Type(Type::TypeName::UNDEFINED);
-    virtual ~Expression() {}
+    virtual ~Expression() {delete type;}
     std::string tryAddTypeToPrint(std::string str) const{
         if(type && type->getType() != Type::TypeName::UNDEFINED){
             return str + " : " + type->getStringTypeName();
@@ -233,7 +234,7 @@ public:
 
     ~Let()
     {
-        delete type;
+        delete letType;
         delete initExpr;
         delete scopeExpr;
     }
@@ -388,6 +389,7 @@ public:
     std::string getName() { return name; }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
     llvm::Value* codegen(CodeGenerator& generator) override;
+    llvm::Value *codegenPointer(CodeGenerator &generator, std::string id);
 
 };
 
@@ -531,7 +533,6 @@ public:
 
     ~Field()
     {
-        delete type;
         delete initExpr;
     }
 
@@ -563,7 +564,7 @@ public:
     Formal(const std::string &name, Type *type)
         : name(name), type(type) {}
 
-    ~Formal() { delete type; }
+    ~Formal() {  }
 
     std::string print() const override
     {
@@ -619,7 +620,7 @@ public:
     }
     bool checkSemantics(ClassSymbolTable* classSymbols, ProgramScope* parentScope) override;
 
-    llvm::Value* createFunctionType(CodeGenerator& generator);
+    llvm::Value* createFunctionType(CodeGenerator& generator,llvm::StructType *classType);
     llvm::Value* codegen(CodeGenerator& generator);
 };
 

@@ -402,7 +402,7 @@ public:
     llvm::IRBuilder<> builder;
     std::unordered_map<std::string, llvm::StructType*> customTypes;
 
-
+    ~CodeGenerator(){delete module; customTypes.clear();}
     CodeGenerator(const std::string& fileName)
         : builder(context) {
         std::unique_ptr<llvm::MemoryBuffer> buf = llvm::MemoryBuffer::getMemBuffer(llvm::StringRef(initialCode));

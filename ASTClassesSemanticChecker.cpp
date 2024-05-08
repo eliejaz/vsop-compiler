@@ -7,7 +7,7 @@ void ASTNode::printScope(ProgramScope *parentScope)
     int level = 0;
     while (currentScope != nullptr)
     {
-        std::cout << currentScope->scopeLevelName <<std::endl;
+        std::cout << currentScope->scopeLevelName << std::endl;
         for (const auto &pair : currentScope->symbolToTypeMap)
         {
             std::cout << "  " << pair.first << " : " << pair.second->getStringTypeName() << std::endl;
@@ -115,7 +115,6 @@ bool If::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentScop
         oss << "Type mismatch for in 'If', both branch don't agree, type are : '" << thenBranch->type->getStringTypeName() << "' and '" << elseBranch->type->getStringTypeName() << "'";
         printSemanticError(oss.str());
     }
-
     scope = parentScope;
 
     return noError;
@@ -331,7 +330,7 @@ bool Assign::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
 {
     bool noError = true;
     noError &= expr->checkSemantics(classSymbols, parentScope);
-    Type* parentType = parentScope->lookup(name);
+    Type *parentType = parentScope->lookup(name);
     if (!parentType)
     {
         std::ostringstream oss;
@@ -341,25 +340,29 @@ bool Assign::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parent
     }
     type = expr->type;
 
-    ProgramScope* currentScope = parentScope;
-        while (currentScope != nullptr) {
-            auto it = currentScope->symbolToTypeMap.find(name);
-            if (it != currentScope->symbolToTypeMap.end()) {
-                if(!type->isCompatibleWith(it->second, classSymbols)){
-                    std::ostringstream oss;
-                    oss << "This literal hast type: " << type->getStringTypeName() << " expected type: " << it->second->getStringTypeName()  << ".";
-                    printSemanticError(oss.str());
-                    noError = false;
-                }
-                if(type->typeName == Type::TypeName::Custom){
-                    it->second->customTypeName = type->customTypeName;
-                    it->second->typeClass = type->typeClass;
-                }
-                type = it->second;
-                break;
+    ProgramScope *currentScope = parentScope;
+    while (currentScope != nullptr)
+    {
+        auto it = currentScope->symbolToTypeMap.find(name);
+        if (it != currentScope->symbolToTypeMap.end())
+        {
+            if (!type->isCompatibleWith(it->second, classSymbols))
+            {
+                std::ostringstream oss;
+                oss << "This literal hast type: " << type->getStringTypeName() << " expected type: " << it->second->getStringTypeName() << ".";
+                printSemanticError(oss.str());
+                noError = false;
             }
-            currentScope = currentScope->parentScope;
+            if (type->typeName == Type::TypeName::Custom)
+            {
+                it->second->customTypeName = type->customTypeName;
+                it->second->typeClass = type->typeClass;
+            }
+            type = it->second;
+            break;
         }
+        currentScope = currentScope->parentScope;
+    }
 
     scope = parentScope;
 
@@ -378,10 +381,10 @@ bool New::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSco
         printSemanticError(oss.str());
         noError = false;
     }
-    
+
     type = new Type(Type::TypeName::Custom);
     type->SetTypeCustom(typeName);
-    Class* ct = classSymbols->getClass(type->getStringTypeName());
+    Class *ct = classSymbols->getClass(type->getStringTypeName());
 
     type->typeClass = ct;
     scope = parentScope;
@@ -539,6 +542,11 @@ bool Field::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentS
         }
     }
 
+    if (type->typeName == Type::TypeName::Custom)
+    {
+        type->typeClass = classSymbols->getClass(type->getStringTypeName());
+    }
+
     scope = parentScope;
     return noError;
 }
@@ -589,7 +597,8 @@ bool Method::checkFormalSemantics(ClassSymbolTable *classSymbols, ProgramScope *
             printSemanticError(oss.str());
             noError = false;
         }
-        if(formal->getType()->typeName == Type::TypeName::Custom){
+        if (formal->getType()->typeName == Type::TypeName::Custom)
+        {
             formal->getType()->typeClass = classSymbols->getClass(formal->getType()->getStringTypeName());
         }
         noError &= formal->checkSemantics(classSymbols, parentScope);
@@ -804,10 +813,11 @@ Class *Program::createObjectClass() const
         new Method("inputLine", {}, new Type(Type::TypeName::String), new Block({})),
         new Method("inputBool", {}, new Type(Type::TypeName::Bool), new Block({})),
         new Method("inputInt32", {}, new Type(Type::TypeName::Int32), new Block({}))};
-    Class* objectClass =  new Class("Object", {}, methods, "");
+    Class *objectClass = new Class("Object", {}, methods, "");
 
     for (auto *method : objectClass->getMethods())
-    {method->caller = objectClass;
+    {
+        method->caller = objectClass;
     }
     objectType->typeClass = objectClass;
     objectClass->allMethods = methods;
@@ -825,7 +835,6 @@ bool Program::checkMainClass(ClassSymbolTable *classSymbols)
         oss << "There is no Main class in the program file.";
         printSemanticError(oss.str());
         return false;
-
     }
     Method *mainMethod = mainClass->getMethod("main", classSymbols);
     if (!mainMethod)
@@ -834,7 +843,6 @@ bool Program::checkMainClass(ClassSymbolTable *classSymbols)
         oss << "There is no main function in Main class in the program file.";
         printSemanticError(oss.str());
         return false;
-
     }
 
     if (mainMethod->getReturnType()->getType() != Type::TypeName::Int32)

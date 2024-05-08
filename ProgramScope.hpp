@@ -15,7 +15,7 @@ public:
     ProgramScope* parentScope;
     std:: string scopeLevelName;
     ASTNode* scopeNode;
-
+    ~ProgramScope(){delete parentScope;symbolToTypeMap.clear(); }
     ProgramScope(ProgramScope* parent = nullptr, std:: string scopeLevelName = "class"): parentScope(parent), scopeLevelName(scopeLevelName)  {}
 
    bool addSymbol(const std::string& name, Type* type) {

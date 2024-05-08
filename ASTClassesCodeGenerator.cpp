@@ -12,7 +12,7 @@ llvm::Type *Type::typeToLLVM(CodeGenerator &generator)
     case TypeName::String:
         return llvm::Type::getInt8PtrTy(generator.context);
     case TypeName::Unit:
-        return llvm::Type::getVoidTy(generator.context);
+        return llvm::Type::getInt1Ty(generator.context);
     case TypeName::Custom:
         return generator.handleCustomType(customTypeName)->getPointerTo();
     default:
@@ -37,7 +37,8 @@ llvm::Value *If::codegen(CodeGenerator &generator)
     // Then block
     generator.builder.SetInsertPoint(thenBlock);
     llvm::Value *thenValue = thenBranch->codegen(generator);
-    thenValue = generator.builder.CreateBitCast(thenValue, ifType, "thenCast");
+    if(type->typeName == Type::TypeName::Custom)
+        thenValue = generator.builder.CreateBitCast(thenValue, ifType, "thenCast");
     thenBlock = generator.builder.GetInsertBlock();
     generator.builder.CreateBr(mergeBlock);
 
@@ -46,8 +47,8 @@ llvm::Value *If::codegen(CodeGenerator &generator)
     generator.builder.SetInsertPoint(elseBlock);
     llvm::Value *elseValue = elseBranch ? elseBranch->codegen(generator) : nullptr;
     if (elseValue)
-    {
-        elseValue = generator.builder.CreateBitCast(elseValue, ifType, "elseCast");
+    {   if(type->typeName == Type::TypeName::Custom)
+            elseValue = generator.builder.CreateBitCast(elseValue, ifType, "elseCast");
     }
     elseBlock = generator.builder.GetInsertBlock();
     generator.builder.CreateBr(mergeBlock);
@@ -72,25 +73,28 @@ llvm::Value *If::codegen(CodeGenerator &generator)
 /* While */
 llvm::Value *While::codegen(CodeGenerator &generator)
 {
+
     llvm::Function *function = generator.builder.GetInsertBlock()->getParent();
 
     // Create the condition value
     llvm::Value *condValue = condition->codegen(generator);
-
     llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(generator.context, "loop", function);
     llvm::BasicBlock *afterBlock = llvm::BasicBlock::Create(generator.context, "afterloop");
+
 
     // Initial branch decision
     generator.builder.CreateCondBr(condValue, loopBlock, afterBlock);
 
     // Loop block content
+
     generator.builder.SetInsertPoint(loopBlock);
+
     body->codegen(generator);
+
 
     // Reevaluate condition at the end of the loop
     condValue = condition->codegen(generator);
     generator.builder.CreateCondBr(condValue, loopBlock, afterBlock);
-
     // Exit point
     function->getBasicBlockList().push_back(afterBlock);
     generator.builder.SetInsertPoint(afterBlock);
@@ -113,15 +117,18 @@ llvm::Value *Let::codegen(CodeGenerator &generator)
     if (initExpr)
     {
         llvm::Value *initVal = initExpr->codegen(generator);
-        letType->llvmValue = generator.builder.CreateBitCast(initVal, letType->typeToLLVM(generator), "letCast");
-        generator.builder.CreateStore(letType->llvmValue , alloca);
+        
+        if(letType->typeName == Type::TypeName::Custom)
+            initVal = generator.builder.CreateBitCast(initVal, letType->typeToLLVM(generator), "letCast");
+
+        generator.builder.CreateStore(initVal, alloca);
     }
 
-    llvm::Value *scopeVal = scopeExpr->codegen(generator);
+    type->llvmValue = scopeExpr->codegen(generator);
 
-    type->llvmValue = generator.builder.CreateBitCast(scopeVal, type->typeToLLVM(generator), "letCast");
+    if(type->typeName == Type::TypeName::Custom)
+        type->llvmValue = generator.builder.CreateBitCast(type->llvmValue, type->typeToLLVM(generator), "letCast");
 
-    ;
     return type->llvmValue ;
 }
 
@@ -149,8 +156,9 @@ llvm::Value *UnaryOp::codegen(CodeGenerator &generator)
 llvm::Value *BinaryOp::codegen(CodeGenerator &generator) {
     llvm::Value *L = left->codegen(generator);
     llvm::Value *R = nullptr;
-    if(op!= Op::And)
+    if(op != Op::And)
        R = right->codegen(generator);
+
 
     switch (op) {
     case Op::Add:
@@ -217,8 +225,8 @@ llvm::Value *Assign::codegen(CodeGenerator &generator)
 
     // Get the first set var llvm
     Type *type = currentScope->lookup(name);
-
-    if (currentScope->lookupLevelName(name) == "class")
+    std::string levelName = currentScope->lookupLevelName(name);
+    if ( levelName == "class")
     {
         Class *scopeClass = dynamic_cast<Class *>(currentScope->lookupScopeNode(name));
 
@@ -236,20 +244,29 @@ llvm::Value *Assign::codegen(CodeGenerator &generator)
                 break;
             }
         }
-    }
+    } 
     else
     {
-
-        var = type->llvmValue;
+        var = codegenPointer(generator, name);
     }
 
+
+
+
     llvm::Value *exprVal = expr->codegen(generator);
+
+    if(type->typeName == Type::TypeName::Custom)
+        exprVal = generator.builder.CreateBitCast(exprVal, type->typeToLLVM(generator), "assignCast");
+
     generator.builder.CreateStore(exprVal, var);
 
-    type->llvmValue = generator.builder.CreateBitCast(exprVal, type->typeToLLVM(generator), "assignCast");
-
-
+    type->llvmValue = var;
     return type->llvmValue;
+}
+
+llvm::Value *Assign::codegenPointer(CodeGenerator &generator, std::string id){
+    Type *objectIdType = scope->lookup(id);
+    return objectIdType->llvmValue;
 }
 
 /* New */
@@ -283,6 +300,8 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
         }
     }
 
+
+
     llvm::Value *vTablePtr = generator.builder.CreateStructGEP(thisObj->getType()->getPointerElementType(), thisObj, 0);
     llvm::Value *vTableValue = generator.builder.CreateLoad(vTablePtr->getType()->getPointerElementType(), vTablePtr, "vTableValue");
     llvm::Value *funcPtrVal = generator.builder.CreateStructGEP(vTableValue->getType()->getPointerElementType(), vTableValue, methodIndex, "methodValue");
@@ -299,9 +318,8 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
     {
         llvm::Value *argVal = args[i]->codegen(generator);
         llvm::Type *paramType = calleeFuncType->getParamType(i + 1);
-
-        llvm::Value *castedArgVal = generator.builder.CreateBitCast(argVal, paramType, "arg" + std::to_string(i));
-        argVals.push_back(castedArgVal);
+        argVal = generator.builder.CreateBitCast(argVal, paramType, "arg" + std::to_string(i));
+        argVals.push_back(argVal);
     }
 
     // Create the call instruction
@@ -310,10 +328,12 @@ llvm::Value *Call::codegen(CodeGenerator &generator)
 }
 
 /* ObjectId */
+
 llvm::Value *ObjectId::codegen(CodeGenerator &generator)
 {
     Type *objectIdType = scope->lookup(id);
-        if (scope->lookupLevelName(id) == "class")
+    std::string lookUpName = scope->lookupLevelName(id);
+        if (lookUpName == "class")
     {
         Class *scopeClass = dynamic_cast<Class *>(scope->lookupScopeNode(id));
 
@@ -332,6 +352,9 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
                 break;
             }
         }
+    }else if (lookUpName == "let"){
+        return generator.builder.CreateLoad(objectIdType->typeToLLVM(generator), objectIdType->llvmValue);
+
     }
     else{
         type->llvmValue = objectIdType->llvmValue;
@@ -397,7 +420,7 @@ llvm::Value *BooleanLiteral::codegen(CodeGenerator &generator)
 /* UnitLiteral */
 llvm::Value *UnitLiteral::codegen(CodeGenerator &generator)
 {
-    return llvm::UndefValue::get(llvm::Type::getVoidTy(generator.context));
+    return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
 }
 
 /* Block */
@@ -412,9 +435,8 @@ llvm::Value *Block::codegen(CodeGenerator &generator)
 }
 
 /* Method */
-llvm::Value *Method::createFunctionType(CodeGenerator &generator)
+llvm::Value *Method::createFunctionType(CodeGenerator &generator, llvm::StructType *classType)
 {
-    llvm::StructType *classType = generator.handleCustomType(caller->getName());
     std::vector<llvm::Type *> paramTypes;
     paramTypes.push_back(classType->getPointerTo());
     for (auto &formal : formals)
@@ -423,8 +445,9 @@ llvm::Value *Method::createFunctionType(CodeGenerator &generator)
         paramTypes.push_back(type);
     }
     llvm::FunctionType *funcType = llvm::FunctionType::get(returnType->typeToLLVM(generator), paramTypes, false);
+    llvm::Value * toRet = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "__" + name, generator.module);
 
-    return llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, caller->getName() + "__" + name, generator.module);
+    return toRet;
 }
 
 llvm::Value *Method::codegen(CodeGenerator &generator)
@@ -487,7 +510,7 @@ void Class::collectParentFields(std::vector<Field *> &allFields)
 }
 
 void Class::codegen(CodeGenerator &generator)
-{
+{   
 
     std::vector<llvm::Type *> classFieldTypes;
 
@@ -498,6 +521,9 @@ void Class::codegen(CodeGenerator &generator)
     std::string vtableName = name + "VTable";
 
     llvm::StructType *vtableType = generator.handleCustomType(vtableName);
+    llvm::StructType *classType = generator.handleCustomType(name);
+    llvm::FunctionType *funcType = llvm::FunctionType::get(classType->getPointerTo(), false);
+    llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, name + "___new", generator.module);
 
     classFieldTypes.push_back(vtableType->getPointerTo());
 
@@ -510,13 +536,14 @@ void Class::codegen(CodeGenerator &generator)
 
     // Define the class type with fields
 
-    llvm::StructType *classType = generator.handleCustomType(name);
+
     classType->setBody(classFieldTypes);
 
     for (auto &method : methods)
     {
-        method->createFunctionType(generator);
+        method->createFunctionType(generator, classType);
     }
+
     std::vector<Method *> collectAllMethods;
     collectMethods(collectAllMethods);
     allMethods = collectAllMethods;
@@ -548,8 +575,7 @@ void Class::codegen(CodeGenerator &generator)
 
 llvm::Function *Class::createClassNewFunction(CodeGenerator &generator, llvm::StructType *classType, llvm::GlobalVariable *vTable, const std::string &className)
 {
-    llvm::FunctionType *funcType = llvm::FunctionType::get(classType->getPointerTo(), false);
-    llvm::Function *func = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, className + "___new", generator.module);
+    llvm::Function *func = generator.module->getFunction(llvm::StringRef(className + "___new"));
     llvm::BasicBlock *entryBlock = llvm::BasicBlock::Create(generator.context, "entry", func);
     generator.builder.SetInsertPoint(entryBlock);
 
@@ -614,7 +640,7 @@ llvm::Value *Class::getDefaultFieldValue(CodeGenerator &generator, Type *fieldTy
             return gep;
         }
     case Type::TypeName::Unit:
-        return llvm::UndefValue::get(llvm::Type::getVoidTy(generator.context));
+        return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
     case Type::TypeName::Custom:
         return llvm::ConstantPointerNull::get(static_cast<llvm::PointerType*>(fieldType->typeToLLVM(generator)));
     default:
@@ -625,6 +651,7 @@ llvm::Value *Class::getDefaultFieldValue(CodeGenerator &generator, Type *fieldTy
 /* Program */
 void Program::codegen(CodeGenerator &generator)
 {
+
     for (auto &klass : classes)
     {
         klass->codegen(generator);

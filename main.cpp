@@ -63,7 +63,6 @@ int main(int argc, char const *argv[])
 
         if (res == 0)
             cout << driver.result->print() << endl;
-
         return res;
     case Mode::SEMANTIC:
         res = driver.parse();
@@ -75,7 +74,6 @@ int main(int argc, char const *argv[])
         if (res == 0){
             cout << driver.result->print() << endl;
         }
-
         return res;    
     case Mode::GENERATE:
         res = driver.parse();
@@ -119,6 +117,7 @@ case Mode::GENERATEFILE:
 
         std::string llcCommand = "clang -o " + executableName + " " + llFileName;
         system(llcCommand.c_str());
+        
     }
     return res;            
     }
