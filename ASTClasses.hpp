@@ -110,6 +110,7 @@ public:
     bool isSubtypeOf(const Type* base, ClassSymbolTable* classSymbols) const;
     bool isCompatibleWith(const Type* other, ClassSymbolTable* classSymbols) const;
     llvm::Type* typeToLLVM(CodeGenerator& generator);
+    llvm::Value* getDefaultValue(CodeGenerator &generator);
 };
 
 class Expression : public ASTNode
@@ -689,7 +690,6 @@ public:
         return nullptr;
     }
 
-    llvm::Value* getDefaultFieldValue(CodeGenerator& generator, Type* fieldType);
     void collectMethods(std::vector<Method*>& allMethods);
     void collectParentFields(std::vector<Field *>& allFields);
     llvm::Function* createClassNewFunction(CodeGenerator& generator, llvm::StructType* classType, llvm::GlobalVariable* vTable, const std::string& className);

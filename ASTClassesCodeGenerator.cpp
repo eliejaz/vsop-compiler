@@ -20,6 +20,42 @@ llvm::Type *Type::typeToLLVM(CodeGenerator &generator)
     }
 }
 
+llvm::Value *Type::getDefaultValue(CodeGenerator &generator)
+{
+    switch (typeName)
+    {
+    case TypeName::Int32:
+        return llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0));
+    case TypeName::Bool:
+        return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
+    case TypeName::String:
+        {
+            // Create a constant empty string ""
+            llvm::Constant* strConstant = llvm::ConstantDataArray::getString(generator.context, "", true);
+            llvm::GlobalVariable* globalStr = new llvm::GlobalVariable(
+                *generator.module, 
+                strConstant->getType(), 
+                true, 
+                llvm::GlobalValue::PrivateLinkage, 
+                strConstant,
+                ".str.empty");
+
+            // Properly get the pointer to the first character of the string
+            llvm::ArrayType* arrayType = llvm::ArrayType::get(llvm::Type::getInt8Ty(generator.context), 1);
+            llvm::Constant* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(generator.context), 0);
+            std::vector<llvm::Constant*> indices = {zero, zero};  // index into the array
+            llvm::Constant* gep = llvm::ConstantExpr::getGetElementPtr(arrayType, globalStr, indices);
+
+            return gep;
+        }
+    case TypeName::Unit:
+        return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
+    case TypeName::Custom:
+        return llvm::ConstantPointerNull::get(static_cast<llvm::PointerType*>(typeToLLVM(generator)));
+    default:
+        return llvm::UndefValue::get(llvm::Type::getVoidTy(generator.context));
+    }
+}
 
 /* If */
 llvm::Value *If::codegen(CodeGenerator &generator)
@@ -114,15 +150,18 @@ llvm::Value *Let::codegen(CodeGenerator &generator)
     llvm::AllocaInst *alloca = TmpBuilder.CreateAlloca(letType->typeToLLVM(generator), nullptr, llvm::Twine(name));
     letType->llvmValue = alloca;
 
+    llvm::Value *initVal;
     if (initExpr)
     {
-        llvm::Value *initVal = initExpr->codegen(generator);
-        
+        initVal = initExpr->codegen(generator);   
         if(letType->typeName == Type::TypeName::Custom)
             initVal = generator.builder.CreateBitCast(initVal, letType->typeToLLVM(generator), "letCast");
-
-        generator.builder.CreateStore(initVal, alloca);
+    }else{
+        initVal = letType->getDefaultValue(generator);
     }
+
+
+    generator.builder.CreateStore(initVal, alloca);
 
     type->llvmValue = scopeExpr->codegen(generator);
 
@@ -174,6 +213,8 @@ llvm::Value *BinaryOp::codegen(CodeGenerator &generator) {
         type->llvmValue = generator.builder.CreateSDiv(L, R, "divtmp");
         break;
     case Op::Equal:
+        L->dump();
+        R->dump();
         type->llvmValue = generator.builder.CreateICmpEQ(L, R, "eqtmp");
         break;
     case Op::LessThan:
@@ -261,7 +302,7 @@ llvm::Value *Assign::codegen(CodeGenerator &generator)
     generator.builder.CreateStore(exprVal, var);
 
     type->llvmValue = var;
-    return type->llvmValue;
+    return exprVal;
 }
 
 llvm::Value *Assign::codegenPointer(CodeGenerator &generator, std::string id){
@@ -352,7 +393,8 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
                 break;
             }
         }
-    }else if (lookUpName == "let"){
+    }else if (lookUpName == "let" ||objectIdType->llvmValue->getType()->isPointerTy()){
+        generator.builder.CreateLoad(objectIdType->typeToLLVM(generator), objectIdType->llvmValue)->dump();
         return generator.builder.CreateLoad(objectIdType->typeToLLVM(generator), objectIdType->llvmValue);
 
     }
@@ -598,7 +640,7 @@ llvm::Function *Class::createClassNewFunction(CodeGenerator &generator, llvm::St
         }
         else
         {
-            defaultValue = getDefaultFieldValue(generator, field->getType());
+            defaultValue = field->getType()->getDefaultValue(generator);
         }
         llvm::Value *fieldPtr = generator.builder.CreateStructGEP(classType, instance, fieldIndex, field->getName() + "Ptr");
         generator.builder.CreateStore(defaultValue, fieldPtr);
@@ -611,42 +653,7 @@ llvm::Function *Class::createClassNewFunction(CodeGenerator &generator, llvm::St
     return func;
 }
 
-llvm::Value *Class::getDefaultFieldValue(CodeGenerator &generator, Type *fieldType)
-{
-    switch (fieldType->getType())
-    {
-    case Type::TypeName::Int32:
-        return llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0));
-    case Type::TypeName::Bool:
-        return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
-    case Type::TypeName::String:
-        {
-            // Create a constant empty string ""
-            llvm::Constant* strConstant = llvm::ConstantDataArray::getString(generator.context, "", true);
-            llvm::GlobalVariable* globalStr = new llvm::GlobalVariable(
-                *generator.module, 
-                strConstant->getType(), 
-                true, 
-                llvm::GlobalValue::PrivateLinkage, 
-                strConstant,
-                ".str.empty");
 
-            // Properly get the pointer to the first character of the string
-            llvm::ArrayType* arrayType = llvm::ArrayType::get(llvm::Type::getInt8Ty(generator.context), 1);
-            llvm::Constant* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(generator.context), 0);
-            std::vector<llvm::Constant*> indices = {zero, zero};  // index into the array
-            llvm::Constant* gep = llvm::ConstantExpr::getGetElementPtr(arrayType, globalStr, indices);
-
-            return gep;
-        }
-    case Type::TypeName::Unit:
-        return llvm::ConstantInt::get(generator.context, llvm::APInt(1, 0));
-    case Type::TypeName::Custom:
-        return llvm::ConstantPointerNull::get(static_cast<llvm::PointerType*>(fieldType->typeToLLVM(generator)));
-    default:
-        return llvm::UndefValue::get(llvm::Type::getVoidTy(generator.context));
-    }
-}
 
 /* Program */
 void Program::codegen(CodeGenerator &generator)

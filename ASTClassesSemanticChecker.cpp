@@ -299,10 +299,10 @@ bool BinaryOp::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *pare
     break;
     case Op::Equal:
     {
-        if (!left->type->isCompatibleWith(right->type, classSymbols))
+        if (!left->type->isCompatibleWith(right->type, classSymbols) && !right->type->isCompatibleWith(left->type, classSymbols) )
         {
             noError = false;
-            oss << "Type mismatch for binary operator : " << opToString() << " . Types are : '" << left->type->getStringTypeName() << "' and '" << right->type->getStringTypeName() << "'";
+            oss << "Type mismatch for binary operator: " << opToString() << " . Types are : '" << left->type->getStringTypeName() << "' and '" << right->type->getStringTypeName() << "'";
             printSemanticError(oss.str());
         }
     };
