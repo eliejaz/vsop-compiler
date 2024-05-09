@@ -282,6 +282,7 @@ llvm::Value *BinaryOp::codegen(CodeGenerator &generator)
 llvm::Value *Assign::codegen(CodeGenerator &generator)
 {
 
+    llvm::Value *exprVal = expr->codegen(generator);
     llvm::Value *var = nullptr;
     ProgramScope *currentScope = scope;
 
@@ -302,24 +303,32 @@ llvm::Value *Assign::codegen(CodeGenerator &generator)
                     scope->lookup("self")->llvmValue->getType()->getPointerElementType(),
                     scope->lookup("self")->llvmValue,
                     i + 1, name + "ptr");
+                type->llvmValue = var;
 
                 break;
             }
         }
     }
+    else if (levelName == "method")
+    {
+        llvm::AllocaInst *alloca = generator.builder.CreateAlloca(type->typeToLLVM(generator), nullptr, llvm::Twine(name));
+        Type *newAlloca = new Type(type->typeName);
+        newAlloca->customTypeName = type->customTypeName;
+        newAlloca->typeClass = type->typeClass;
+        newAlloca->llvmValue = alloca;
+        scope->addSymbol(name, newAlloca);
+        var = alloca;
+    }
     else
     {
         var = codegenPointer(generator, name);
+        type->llvmValue = var;
     }
-
-    llvm::Value *exprVal = expr->codegen(generator);
-
+    
     if (type->typeName == Type::TypeName::Custom)
         exprVal = generator.builder.CreateBitCast(exprVal, type->typeToLLVM(generator), "assignCast");
-
     generator.builder.CreateStore(exprVal, var);
 
-    type->llvmValue = var;
     return exprVal;
 }
 
@@ -417,6 +426,7 @@ llvm::Value *ObjectId::codegen(CodeGenerator &generator)
     {
         type->llvmValue = objectIdType->llvmValue;
     }
+    
     return objectIdType->llvmValue;
 }
 
@@ -696,5 +706,5 @@ void Program::codegen(CodeGenerator &generator)
 
     generator.builder.CreateRet(llvm::ConstantInt::get(generator.context, llvm::APInt(32, 0, true)));
 
-    generator.applyOptimizations();
+    //generator.applyOptimizations();
 }

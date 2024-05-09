@@ -150,7 +150,7 @@ bool Let::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSco
     ProgramScope *letScope = new ProgramScope(parentScope, "let");
     letScope->scopeNode = this;
     letScope->addSymbol(name, letType);
-
+    
     if (letType->getType() == Type::TypeName::Custom && !classSymbols->hasClass(letType->getStringTypeName()))
     {
         std::ostringstream oss;
@@ -158,6 +158,7 @@ bool Let::checkSemantics(ClassSymbolTable *classSymbols, ProgramScope *parentSco
         printSemanticError(oss.str());
         noError = false;
     }
+    letType->typeClass = classSymbols->getClass(letType->getStringTypeName());
     if (initExpr)
     {
         noError &= initExpr->checkSemantics(classSymbols, letScope);
