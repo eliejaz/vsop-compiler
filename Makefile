@@ -3,7 +3,7 @@ CXX 			= clang++
 CXXFLAGS        = -Wall -Wextra $(shell llvm-config --cxxflags) -Wno-unused-parameter
 LDFLAGS         = $(shell llvm-config --ldflags --libs --system-libs)
 
-BISONFLAGS 		= -d
+BISONFLAGS 		= -d -Wcounterexamples
 
 EXEC			= vsopc
 
