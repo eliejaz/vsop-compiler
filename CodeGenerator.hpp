@@ -13,6 +13,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Utils.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 
 
 #include <unordered_map>
@@ -458,10 +459,11 @@ public:
       llvm::legacy::FunctionPassManager fpm(module);
 
       // Add specific optimizations
-      fpm.add(llvm::createPromoteMemoryToRegisterPass()); // Promote memory to register
-      fpm.add(llvm::createReassociatePass());             // Reassociate expressions
-      fpm.add(llvm::createGVNPass());                     // Eliminate common subexpressions
-      fpm.add(llvm::createCFGSimplificationPass());       // Simplify the CFG
+      fpm.add(llvm::createPromoteMemoryToRegisterPass());
+      fpm.add(llvm::createInstructionCombiningPass());
+      fpm.add(llvm::createReassociatePass());
+      fpm.add(llvm::createGVNPass());
+      fpm.add(llvm::createCFGSimplificationPass());
 
       // Do function-level optimizations
       fpm.doInitialization();

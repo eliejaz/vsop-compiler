@@ -115,7 +115,7 @@ case Mode::GENERATEFILE:
 
         generator.printLLVMCodeToFile(llFileName);
 
-        std::string llcCommand = "clang -o " + executableName + " " + llFileName;
+        std::string llcCommand = "clang -lm -o " + executableName + " " + llFileName;
         system(llcCommand.c_str());
         
     }

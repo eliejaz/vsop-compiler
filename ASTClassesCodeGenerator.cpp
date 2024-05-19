@@ -73,7 +73,9 @@ llvm::Value *If::codegen(CodeGenerator &generator)
     // Then block
     generator.builder.SetInsertPoint(thenBlock);
     llvm::Value *thenValue = thenBranch->codegen(generator);
-    if (thenBranch->type->typeName == Type::TypeName::Custom)
+    if(type->typeName == Type::TypeName::Unit)
+        thenValue = type->getDefaultValue(generator);
+    else if (thenBranch->type->typeName == Type::TypeName::Custom )
         thenValue = generator.builder.CreateBitCast(thenValue, ifType, "thenCast");
     thenBlock = generator.builder.GetInsertBlock();
     generator.builder.CreateBr(mergeBlock);
@@ -84,6 +86,8 @@ llvm::Value *If::codegen(CodeGenerator &generator)
     llvm::Value *elseValue = elseBranch ? elseBranch->codegen(generator) : nullptr;
     if (elseValue)
     {
+        if(type->typeName == Type::TypeName::Unit)
+            elseValue = type->getDefaultValue(generator);
         if (elseBranch->type->typeName == Type::TypeName::Custom)
             elseValue = generator.builder.CreateBitCast(elseValue, ifType, "elseCast");
     }
