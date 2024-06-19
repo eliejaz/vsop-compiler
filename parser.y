@@ -86,7 +86,6 @@
 %token <int> INTEGERLITERAL "integer_literal"
 
 %type <Expression*> expression
-%type <std::vector<Expression*>> body
 %type <Block*> block
 %type <Program*> program
 %type <Class*> class_declaration
@@ -96,14 +95,9 @@
 %type <Formal*> formal_declaration
 %type <std::vector<Class*>> classes
 %type <std::vector<Expression*>> expressions
-%type <std::vector<Expression*>> expressionsList
-%type <Expression*> valued_expression
-%type <Expression*> op_expression
 %type <std::vector<Expression*>> func_arguments
-%type <std::vector<Expression*>> func_arguments_list
 %type <std::vector<Formal*>> formals
 %type <Type*> all_types
-%type <Expression*> object
 
 // Precedence
 %precedence IF LET IN THEN WHILE DO
@@ -148,7 +142,7 @@ class_members:
 
 field_declaration:
     OBJECTIDENTIFIER COLON all_types SEMICOLON { $$ = new Field($1, $3); setAstNodePostition($$, yyla.location); }
-    | OBJECTIDENTIFIER COLON all_types ASSIGN valued_expression SEMICOLON { $$ = new Field($1, $3, $5); setAstNodePostition($$, yyla.location); }
+    | OBJECTIDENTIFIER COLON all_types ASSIGN expression SEMICOLON { $$ = new Field($1, $3, $5); setAstNodePostition($$, yyla.location); }
     ;
 
 method_declaration:
@@ -165,84 +159,68 @@ formal_declaration:
     OBJECTIDENTIFIER COLON all_types { $$ = new Formal($1, $3); setAstNodePostition($$, yyla.location); }
     ;
 
-body:
-    expression      { $$ = std::vector<Expression*>(); $$.push_back($1);}
-    | LBRACE expressions RBRACE {$$ = $2; }
-    ;
-
 block:
-    LBRACE expressionsList RBRACE { $$ = new Block($2); setAstNodePostition($$, yyla.location);}
+    LBRACE RBRACE {
+        std::string errorMessage = "Blocks should contain at least one statement or expression.";
+        error(yyla.location, YY_MOVE(errorMessage));
+        YYERROR;
+    }
+    | LBRACE expressions RBRACE { $$ = new Block($2); setAstNodePostition($$, yyla.location);}
+    | LBRACE expressions {
+        std::string errorMessage = "A closing '}' is missing.";
+        error(yyla.location, YY_MOVE(errorMessage));
+        YYERROR;
+    }
     ;
-
 expressions:
-                                        { $$ = std::vector<Expression*>(); }
-    | expressionsList                   { $$ = $1; }
-    ;
+                                       { $$ = std::vector<Expression*>(); }
+    | expression                       {  $$ = std::vector<Expression*>(); $$.push_back($1);}
+    | expressions SEMICOLON expression { ($1).push_back($3); $$ = $1;}
 
-expressionsList:
-    expression                       {  $$ = std::vector<Expression*>(); $$.push_back($1);}
-    | expressionsList SEMICOLON expression { ($1).push_back($3); $$ = $1;}
     ;
 
 expression:
-    LPAR expression RPAR                  { $$ = $2; }
-    | valued_expression                   { $$ = $1; }
-    | OBJECTIDENTIFIER ASSIGN valued_expression  { $$ = new Assign($1, $3);setAstNodePostition($$, yyla.location); }
-    | IF valued_expression THEN body ELSE body { $$ = new If($2,  new Block($4), new Block($6));}
-    | IF valued_expression THEN body                 { $$ = new If($2, new Block($4));}
-    | WHILE valued_expression DO body                { $$ = new While($2, new Block($4));}
-    | LET OBJECTIDENTIFIER COLON all_types IN body { $$ = new Let($2, $4, new Block($6));}
-    | LET OBJECTIDENTIFIER COLON all_types ASSIGN expression IN body { $$ = new Let($2, $4, new Block($8), $6);}
-    ;
-
-valued_expression:
-    INTEGERLITERAL                        { $$ = new IntegerLiteral($1);setAstNodePostition($$, yyla.location); }
+     block                                { $$ = $1; }
+    | LPAR expression RPAR                { $$ = $2; }
     | LPAR RPAR                           { $$ = new UnitLiteral();setAstNodePostition($$, yyla.location); }
+    | INTEGERLITERAL                      { $$ = new IntegerLiteral($1);setAstNodePostition($$, yyla.location); }
     | STRINGLITERAL                       { $$ = new StringLiteral($1);setAstNodePostition($$, yyla.location); }
     | TRUE                                { $$ = new BooleanLiteral(true);setAstNodePostition($$, yyla.location); }
     | FALSE                               { $$ = new BooleanLiteral(false);setAstNodePostition($$, yyla.location); }
+    | OBJECTIDENTIFIER                    { $$ = new ObjectId($1);setAstNodePostition($$, yyla.location); }
     | SELF                                { $$ = new ObjectId();setAstNodePostition($$, yyla.location); }
-    | op_expression                       { $$ = $1; }
-    | object                              { $$ = $1; }
-    ;
-
-object:
-    OBJECTIDENTIFIER                                { $$ = new ObjectId($1);setAstNodePostition($$, yyla.location); }
+    | expression PLUS expression          { $$ = new BinaryOp(BinaryOp::Op::Add, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression MINUS expression         { $$ = new BinaryOp(BinaryOp::Op::Subtract, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression TIMES expression         { $$ = new BinaryOp(BinaryOp::Op::Multiply, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression DIV expression           { $$ = new BinaryOp(BinaryOp::Op::Divide, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression POW expression           { $$ = new BinaryOp(BinaryOp::Op::Power, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression EQUAL expression         { $$ = new BinaryOp(BinaryOp::Op::Equal, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression LOWER expression         { $$ = new BinaryOp(BinaryOp::Op::LessThan, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression LOWEREQUAL expression    { $$ = new BinaryOp(BinaryOp::Op::LessEqual, $1, $3);setAstNodePostition($$, yyla.location); }
+    | expression AND expression           { $$ = new BinaryOp(BinaryOp::Op::And, $1, $3);setAstNodePostition($$, yyla.location); }
+    | NOT expression                      { $$ = new UnaryOp(UnaryOp::Op::Not, $2);setAstNodePostition($$, yyla.location); }
+    | MINUS expression                    { $$ = new UnaryOp(UnaryOp::Op::Negate, $2);setAstNodePostition($$, yyla.location); }
+    | ISNULL expression                   { $$ = new UnaryOp(UnaryOp::Op::IsNull, $2);setAstNodePostition($$, yyla.location); }
+    | OBJECTIDENTIFIER ASSIGN expression  { $$ = new Assign($1, $3);setAstNodePostition($$, yyla.location); }
+    | IF expression THEN expression ELSE expression { $$ = new If($2, $4, $6);setAstNodePostition($$, yyla.location); }
+    | IF expression THEN expression                 { $$ = new If($2, $4);setAstNodePostition($$, yyla.location); }
+    | WHILE expression DO expression                { $$ = new While($2, $4);setAstNodePostition($$, yyla.location); }
+    | LET OBJECTIDENTIFIER COLON all_types IN expression { $$ = new Let($2, $4, $6);setAstNodePostition($$, yyla.location); }
+    | LET OBJECTIDENTIFIER COLON all_types ASSIGN expression IN expression { $$ = new Let($2, $4, $8, $6);setAstNodePostition($$, yyla.location); }
+    | NEW TYPEIDENTIFIER { $$ = new New($2);setAstNodePostition($$, yyla.location); }
     | OBJECTIDENTIFIER LPAR func_arguments RPAR { 
         Expression* caller = new ObjectId("self");
         setAstNodePostition(caller, yyla.location); 
         $$ = new Call($1, $3, caller); 
         setAstNodePostition($$, yyla.location); 
         }
-    | NEW TYPEIDENTIFIER { $$ = new New($2);setAstNodePostition($$, yyla.location); }
-    | object DOT OBJECTIDENTIFIER LPAR func_arguments RPAR { $$ = new Call($3, $5, $1);setAstNodePostition($$, yyla.location); }
-    | LPAR object RPAR  { $$ = $2; }
-    ;
-
-
-op_expression:
-    valued_expression   PLUS  valued_expression            { $$ = new BinaryOp(BinaryOp::Op::Add, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression MINUS valued_expression         { $$ = new BinaryOp(BinaryOp::Op::Subtract, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression TIMES valued_expression         { $$ = new BinaryOp(BinaryOp::Op::Multiply, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression DIV valued_expression           { $$ = new BinaryOp(BinaryOp::Op::Divide, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression POW valued_expression           { $$ = new BinaryOp(BinaryOp::Op::Power, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression EQUAL valued_expression         { $$ = new BinaryOp(BinaryOp::Op::Equal, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression LOWER valued_expression         { $$ = new BinaryOp(BinaryOp::Op::LessThan, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression LOWEREQUAL valued_expression    { $$ = new BinaryOp(BinaryOp::Op::LessEqual, $1, $3);setAstNodePostition($$, yyla.location); }
-    | valued_expression AND valued_expression           { $$ = new BinaryOp(BinaryOp::Op::And, $1, $3);setAstNodePostition($$, yyla.location); }
-    | NOT valued_expression                      { $$ = new UnaryOp(UnaryOp::Op::Not, $2);setAstNodePostition($$, yyla.location); }
-    | MINUS valued_expression                    { $$ = new UnaryOp(UnaryOp::Op::Negate, $2);setAstNodePostition($$, yyla.location); }
-    | ISNULL valued_expression                   { $$ = new UnaryOp(UnaryOp::Op::IsNull, $2);setAstNodePostition($$, yyla.location); }
+    | expression DOT OBJECTIDENTIFIER LPAR func_arguments RPAR { $$ = new Call($3, $5, $1);setAstNodePostition($$, yyla.location); }
     ;
 
 func_arguments:
                             { $$ = std::vector<Expression*>(); }
-    | func_arguments_list   { $$ = $1; }
-    ;
-
-func_arguments_list:
-    expression            {  $$ = std::vector<Expression*>(); $$.push_back($1); }
-    | func_arguments_list COMMA expression { ($1).push_back($3); $$ = $1; }
+    | expression            {  $$ = std::vector<Expression*>(); $$.push_back($1); }
+    | func_arguments COMMA expression { ($1).push_back($3); $$ = $1; }
     ;
 
 all_types:
